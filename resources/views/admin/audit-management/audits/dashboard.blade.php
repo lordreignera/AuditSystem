@@ -178,6 +178,27 @@
                                                                                                 <button type="button" class="btn btn-outline-info btn-sm" data-bs-toggle="modal" data-bs-target="#tableModal-{{ $question->id }}">
                                                                                                     <i class="mdi mdi-table"></i> View Table
                                                                                                 </button>
+                                                                                                {{-- Display the saved table answer (if any) --}}
+                                                                                                @if($existingResponse && $existingResponse->answer)
+                                                                                                    @php
+                                                                                                        $tableData = is_array($existingResponse->answer) ? $existingResponse->answer : json_decode($existingResponse->answer, true);
+                                                                                                    @endphp
+                                                                                                    @if(is_array($tableData) && count($tableData))
+                                                                                                        <div class="table-responsive mt-2">
+                                                                                                            <table class="table table-bordered table-sm">
+                                                                                                                <tbody>
+                                                                                                                @foreach($tableData as $row)
+                                                                                                                    <tr>
+                                                                                                                        @foreach($row as $cell)
+                                                                                                                            <td>{{ $cell }}</td>
+                                                                                                                        @endforeach
+                                                                                                                    </tr>
+                                                                                                                @endforeach
+                                                                                                                </tbody>
+                                                                                                            </table>
+                                                                                                        </div>
+                                                                                                    @endif
+                                                                                                @endif
                                                                                             </div>
                                                                                         @else
                                                                                             <div class="mb-2">
@@ -306,7 +327,7 @@ foreach($attachedReviewTypes as $reviewType) {
             ->where('audit_id', $audit->id)
             ->where('created_by', auth()->id())
             ->first();
-        $existingTable = $existingResponse && $existingResponse->answer ? json_decode($existingResponse->answer, true) : [];
+        $existingTable = $existingResponse && $existingResponse->answer ? (is_array($existingResponse->answer) ? $existingResponse->answer : json_decode($existingResponse->answer, true)) : [];
         $colCount = 2;
         if (count($rows) && count($rows[0]) > $colCount) $colCount = count($rows[0]);
         elseif (isset($existingTable[0]) && count($existingTable[0]) > $colCount) $colCount = count($existingTable[0]);

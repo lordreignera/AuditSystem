@@ -190,31 +190,7 @@ class ReviewTypeCrudController extends Controller
             ->with('success', 'Audit updated successfully.');
     }
 
-    public function storeResponses(Request $request, $reviewTypeId)
-    {
-        $request->validate([
-            'audit_id' => 'required|exists:audits,id',
-            'answers' => 'required|array',
-        ]);
-
-        foreach ($request->answers as $questionId => $data) {
-            Response::updateOrCreate(
-                [
-                    'audit_id' => $request->audit_id,
-                    'question_id' => $questionId,
-                    'created_by' => auth()->id(),
-                ],
-                [
-                    'answer' => $data['answer'] ?? '',
-                    'audit_note' => $data['audit_note'] ?? '',
-                ]
-            );
-        }
-
-        // Redirect back to the URL specified in the form, fallback to audit page
-        return redirect($request->input('redirect_to', route('admin.audits.show', $request->audit_id)))
-            ->with('success', 'Response saved successfully.');
-    }
+    
 
 
 

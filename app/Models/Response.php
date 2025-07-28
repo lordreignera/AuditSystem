@@ -17,6 +17,12 @@ class Response extends Model
         'created_by',
     ];
 
+    // app/Models/Response.php
+// app/Models/Response.php
+    protected $casts = [
+        'answer' => 'array',
+    ];
+
     /**
      * Get the audit that owns the response.
      */

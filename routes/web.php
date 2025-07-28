@@ -96,6 +96,8 @@ Route::middleware([
     })->name('dashboard');
     
     // Admin Dashboard with role-based access
+
+// Admin Dashboard with role-based access
     Route::get('/home', function () {
         $user = auth()->user();
 
@@ -104,7 +106,7 @@ Route::middleware([
         $completedAudits = \App\Models\Audit::where('end_date', '<=', now())->count();
         $totalUsers = \App\Models\User::count();
 
-        // For auditors
+        // For auditors (using belongsToMany)
         $myAssignedAudits = $user->hasRole('Auditor')
             ? $user->audits()->count()
             : 0;
@@ -236,7 +238,7 @@ Route::middleware([
             Route::post('/{reviewType}/template/{template}/store-audit', [\App\Http\Controllers\Admin\ReviewTypeCrudController::class, 'storeAudit'])->name('admin.review-types-crud.store-audit');
         });
 
-        Route::post('/{reviewType}/save-responses', [\App\Http\Controllers\Admin\ReviewTypeCrudController::class, 'storeResponses'])
+        Route::post('/{reviewType}/save-responses', [\App\Http\Controllers\Admin\AuditManagement\AuditController::class, 'storeResponses'])
     ->name('admin.review-types-crud.save-responses');
         
         // Debug routes

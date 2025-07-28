@@ -5,8 +5,13 @@ namespace App\Http\Controllers\Admin\AuditManagement;
 use App\Http\Controllers\Controller;
 use App\Models\Audit;
 use App\Models\Country;
+use App\Models\ReviewType;
+use App\Models\Template;
+use App\Models\Section;
+use App\Models\Question;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use App\Models\Response;
 
 class AuditController extends Controller
 {
@@ -59,10 +64,10 @@ class AuditController extends Controller
         }
 
         $data = $validator->validated();
-        
+
         // Generate unique review code
         $data['review_code'] = Audit::generateReviewCode();
-        
+
         // Filter out empty participants
         if (isset($data['participants'])) {
             $data['participants'] = array_filter($data['participants'], function($participant) {
@@ -97,38 +102,25 @@ class AuditController extends Controller
         ]);
 
         // Get all available review types for adding new ones
-        $availableReviewTypes = \App\Models\ReviewType::where('is_active', true)->with('templates')->get();
-        
+        $availableReviewTypes = ReviewType::where('is_active', true)->with('templates')->get();
+
         // Get existing responses grouped by question
         $existingResponses = collect();
         if ($audit->responses) {
             $existingResponses = $audit->responses->keyBy('question_id');
         }
-        
-        // Get all templates for attached review types
+
+        // Get all templates for attached review types, but only those created for this audit
         $attachedReviewTypes = $audit->reviewTypes;
         foreach ($attachedReviewTypes as $reviewType) {
-            // Get all templates that belong to this review type and were created for this audit
-            // We'll look for templates with the audit-specific naming pattern
-            $auditTemplates = \App\Models\Template::where('review_type_id', $reviewType->id)
-                ->where(function($query) use ($audit) {
-                    $query->where('name', 'like', '%(Audit: ' . $audit->name . ')%')
-                          ->orWhere('is_default', false);
-                })
+            $auditTemplates = Template::where('review_type_id', $reviewType->id)
+                ->where('audit_id', $audit->id)
                 ->with('sections.questions')
                 ->get();
-            
-            // If no audit-specific templates found, get the original templates
-            if ($auditTemplates->isEmpty()) {
-                $auditTemplates = \App\Models\Template::where('review_type_id', $reviewType->id)
-                    ->where('is_active', true)
-                    ->with('sections.questions')
-                    ->get();
-            }
-            
+
             $reviewType->auditTemplates = $auditTemplates;
         }
-        
+
         return view('admin.audit-management.audits.dashboard', compact('audit', 'availableReviewTypes', 'existingResponses', 'attachedReviewTypes'));
     }
 
@@ -164,7 +156,7 @@ class AuditController extends Controller
         }
 
         $data = $validator->validated();
-        
+
         // Filter out empty participants
         if (isset($data['participants'])) {
             $data['participants'] = array_filter($data['participants'], function($participant) {
@@ -202,11 +194,11 @@ class AuditController extends Controller
             return redirect()->back()->withErrors($validator)->withInput();
         }
 
-        $reviewType = \App\Models\ReviewType::find($request->review_type_id);
-        
-        // Get all active templates for this review type
-        $templates = $reviewType->templates()->where('is_active', true)->with('sections.questions')->get();
-        
+        $reviewType = ReviewType::findOrFail($request->review_type_id);
+
+        // Get all default templates (not audit-specific)
+        $templates = $reviewType->templates()->where('is_active', true)->whereNull('audit_id')->with('sections.questions')->get();
+
         if ($templates->isEmpty()) {
             return redirect()->back()->with('error', 'No active templates found for this review type.');
         }
@@ -217,35 +209,38 @@ class AuditController extends Controller
         }
 
         $createdTemplates = [];
-        
-        // Copy ALL templates for this review type
+
         foreach ($templates as $originalTemplate) {
             // Create a copy of the template for this audit
             $auditTemplate = $originalTemplate->replicate();
-            $auditTemplate->name = $originalTemplate->name . ' (Audit: ' . $audit->name . ')';
-            $auditTemplate->review_type_id = $reviewType->id; // Make sure this is set
+            $auditTemplate->name = $originalTemplate->name;
+            $auditTemplate->review_type_id = $reviewType->id;
             $auditTemplate->is_default = false;
+            $auditTemplate->audit_id = $audit->id;
             $auditTemplate->save();
-            
+
             $createdTemplates[] = $auditTemplate;
 
             // Copy sections and questions for this template
             foreach ($originalTemplate->sections as $originalSection) {
                 $auditSection = $originalSection->replicate();
                 $auditSection->template_id = $auditTemplate->id;
+                $auditSection->audit_id = $audit->id;
                 $auditSection->save();
 
                 // Copy questions for this section
                 foreach ($originalSection->questions as $originalQuestion) {
                     $auditQuestion = $originalQuestion->replicate();
                     $auditQuestion->section_id = $auditSection->id;
+                    $auditQuestion->audit_id = $audit->id;
+                    // --- CRITICAL: Deep copy the options field as JSON string, unless already string ---
+                    $auditQuestion->options = is_array($originalQuestion->options) ? json_encode($originalQuestion->options) : $originalQuestion->options;
                     $auditQuestion->save();
                 }
             }
         }
 
-        // For the pivot table, we'll use the first template as the primary one
-        // but the user will have access to all templates through the dashboard
+        // For the pivot table, use the first template as the primary one
         $primaryTemplate = $createdTemplates[0];
 
         // Attach the review type to the audit with the primary template
@@ -272,11 +267,24 @@ class AuditController extends Controller
             return redirect()->back()->withErrors($validator)->withInput();
         }
 
-        // Detach the review type from the audit
+        // Remove all templates, sections, questions for this audit/review_type
+        $templates = Template::where('review_type_id', $request->review_type_id)
+            ->where('audit_id', $audit->id)
+            ->get();
+        foreach ($templates as $template) {
+            foreach ($template->sections as $section) {
+                foreach ($section->questions as $question) {
+                    $question->delete();
+                }
+                $section->delete();
+            }
+            $template->delete();
+        }
+
         $audit->reviewTypes()->detach($request->review_type_id);
 
         return redirect()->route('admin.audits.dashboard', $audit)
-            ->with('success', 'Review type removed successfully.');
+            ->with('success', 'Review type and its templates removed successfully.');
     }
 
     /**
@@ -295,8 +303,11 @@ class AuditController extends Controller
             return redirect()->back()->withErrors($validator)->withInput();
         }
 
-        \App\Models\Section::create([
-            'template_id' => $request->template_id,
+        $template = Template::findOrFail($request->template_id);
+
+        Section::create([
+            'template_id' => $template->id,
+            'audit_id' => $template->audit_id,
             'name' => $request->name,
             'description' => $request->description,
             'order' => $request->order,
@@ -307,9 +318,6 @@ class AuditController extends Controller
             ->with('success', 'Section added successfully.');
     }
 
-    /**
-     * Update a section
-     */
     public function updateSection(Request $request, Audit $audit)
     {
         $validator = Validator::make($request->all(), [
@@ -324,7 +332,7 @@ class AuditController extends Controller
             return redirect()->back()->withErrors($validator)->withInput();
         }
 
-        $section = \App\Models\Section::find($request->section_id);
+        $section = Section::findOrFail($request->section_id);
         $section->update([
             'name' => $request->name,
             'description' => $request->description,
@@ -336,9 +344,6 @@ class AuditController extends Controller
             ->with('success', 'Section updated successfully.');
     }
 
-    /**
-     * Delete a section
-     */
     public function deleteSection(Request $request, Audit $audit)
     {
         $validator = Validator::make($request->all(), [
@@ -349,16 +354,18 @@ class AuditController extends Controller
             return redirect()->back()->withErrors($validator)->withInput();
         }
 
-        $section = \App\Models\Section::find($request->section_id);
+        $section = Section::findOrFail($request->section_id);
+
+        // delete all questions for this section
+        foreach ($section->questions as $question) {
+            $question->delete();
+        }
         $section->delete();
 
         return redirect()->route('admin.audits.dashboard', $audit)
             ->with('success', 'Section deleted successfully.');
     }
 
-    /**
-     * Add a new question to section
-     */
     public function addQuestion(Request $request, Audit $audit)
     {
         $validator = Validator::make($request->all(), [
@@ -374,8 +381,11 @@ class AuditController extends Controller
             return redirect()->back()->withErrors($validator)->withInput();
         }
 
+        $section = Section::findOrFail($request->section_id);
+
         $data = [
-            'section_id' => $request->section_id,
+            'section_id' => $section->id,
+            'audit_id' => $section->audit_id,
             'question_text' => $request->question_text,
             'response_type' => $request->response_type,
             'is_required' => $request->is_required ?? false,
@@ -383,20 +393,16 @@ class AuditController extends Controller
             'is_active' => true,
         ];
 
-        // Handle options for select and yes_no types
         if ($request->options) {
             $data['options'] = json_decode($request->options, true);
         }
 
-        \App\Models\Question::create($data);
+        Question::create($data);
 
         return redirect()->route('admin.audits.dashboard', $audit)
             ->with('success', 'Question added successfully.');
     }
 
-    /**
-     * Update a question
-     */
     public function updateQuestion(Request $request, Audit $audit)
     {
         $validator = Validator::make($request->all(), [
@@ -413,8 +419,8 @@ class AuditController extends Controller
             return redirect()->back()->withErrors($validator)->withInput();
         }
 
-        $question = \App\Models\Question::find($request->question_id);
-        
+        $question = Question::findOrFail($request->question_id);
+
         $data = [
             'question_text' => $request->question_text,
             'response_type' => $request->response_type,
@@ -423,7 +429,6 @@ class AuditController extends Controller
             'order' => $request->order,
         ];
 
-        // Handle options for select and yes_no types
         if ($request->options) {
             $data['options'] = json_decode($request->options, true);
         } else {
@@ -436,9 +441,6 @@ class AuditController extends Controller
             ->with('success', 'Question updated successfully.');
     }
 
-    /**
-     * Delete a question
-     */
     public function deleteQuestion(Request $request, Audit $audit)
     {
         $validator = Validator::make($request->all(), [
@@ -449,16 +451,13 @@ class AuditController extends Controller
             return redirect()->back()->withErrors($validator)->withInput();
         }
 
-        $question = \App\Models\Question::find($request->question_id);
+        $question = Question::findOrFail($request->question_id);
         $question->delete();
 
         return redirect()->route('admin.audits.dashboard', $audit)
             ->with('success', 'Question deleted successfully.');
     }
 
-    /**
-     * Update a template
-     */
     public function updateTemplate(Request $request, Audit $audit)
     {
         $validator = Validator::make($request->all(), [
@@ -472,7 +471,7 @@ class AuditController extends Controller
             return redirect()->back()->withErrors($validator)->withInput();
         }
 
-        $template = \App\Models\Template::find($request->template_id);
+        $template = Template::findOrFail($request->template_id);
         $template->update([
             'name' => $request->name,
             'description' => $request->description,
@@ -483,9 +482,6 @@ class AuditController extends Controller
             ->with('success', 'Template updated successfully.');
     }
 
-    /**
-     * Duplicate a template
-     */
     public function duplicateTemplate(Request $request, Audit $audit)
     {
         $validator = Validator::make($request->all(), [
@@ -496,23 +492,26 @@ class AuditController extends Controller
             return redirect()->back()->withErrors($validator)->withInput();
         }
 
-        $originalTemplate = \App\Models\Template::with('sections.questions')->find($request->template_id);
-        
+        $originalTemplate = Template::with('sections.questions')->findOrFail($request->template_id);
+
         // Create a copy of the template
         $duplicateTemplate = $originalTemplate->replicate();
         $duplicateTemplate->name = $originalTemplate->name . ' (Copy)';
         $duplicateTemplate->is_default = false;
+        $duplicateTemplate->audit_id = $audit->id;
         $duplicateTemplate->save();
 
         // Copy sections and questions
         foreach ($originalTemplate->sections as $originalSection) {
             $duplicateSection = $originalSection->replicate();
             $duplicateSection->template_id = $duplicateTemplate->id;
+            $duplicateSection->audit_id = $audit->id;
             $duplicateSection->save();
 
             foreach ($originalSection->questions as $originalQuestion) {
                 $duplicateQuestion = $originalQuestion->replicate();
                 $duplicateQuestion->section_id = $duplicateSection->id;
+                $duplicateQuestion->audit_id = $audit->id;
                 $duplicateQuestion->save();
             }
         }
@@ -520,4 +519,37 @@ class AuditController extends Controller
         return redirect()->route('admin.audits.dashboard', $audit)
             ->with('success', 'Template duplicated successfully.');
     }
-}
+
+    public function storeResponses(Request $request, $reviewTypeId)
+    {
+        $request->validate([
+            'audit_id' => 'required|exists:audits,id',
+            'answers' => 'required|array',
+        ]);
+
+        foreach ($request->answers as $questionId => $data) {
+            // Handle table questions: Save as JSON if 'table' present
+            if (isset($data['table'])) {
+                $answer = json_encode($data['table']);
+            } else {
+                $answer = $data['answer'] ?? '';
+            }
+
+            Response::updateOrCreate(
+                [
+                    'audit_id' => $request->audit_id,
+                    'question_id' => $questionId,
+                    'created_by' => auth()->id(),
+                ],
+                [
+                    'answer' => $answer,
+                    'audit_note' => $data['audit_note'] ?? '',
+                ]
+            );
+        }
+
+        // Redirect back to the URL specified in the form, fallback to audit page
+        return redirect($request->input('redirect_to', route('admin.audits.show', $request->audit_id)))
+            ->with('success', 'Response saved successfully.');
+    }
+};
