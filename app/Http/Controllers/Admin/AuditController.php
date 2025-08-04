@@ -196,7 +196,7 @@ class AuditController extends Controller
     }
 
     /**
-     * Attach a review type to the audit
+     * Attach a review type to the audit - NEW SIMPLE APPROACH
      */
     public function attachReviewType(Request $request, Audit $audit)
     {
@@ -208,61 +208,31 @@ class AuditController extends Controller
             return redirect()->back()->withErrors($validator)->withInput();
         }
 
-        $reviewType = ReviewType::find($request->review_type_id);
+        $reviewTypeId = $request->review_type_id;
         
-        // Get all active templates for this review type
-        $templates = $reviewType->templates()->where('is_active', true)->with('sections.questions')->get();
-        
-        if ($templates->isEmpty()) {
-            return redirect()->back()->with('error', 'No active templates found for this review type.');
-        }
-
-        // Check if this review type is already attached to this audit
-        if ($audit->reviewTypes()->where('review_type_id', $request->review_type_id)->exists()) {
+        // Check if already attached using new system
+        $existingAttachment = \App\Models\AuditReviewTypeAttachment::where('audit_id', $audit->id)
+            ->where('review_type_id', $reviewTypeId)
+            ->first();
+            
+        if ($existingAttachment) {
             return redirect()->back()->with('error', 'This review type is already attached to this audit.');
         }
-
-        $createdTemplates = [];
         
-        // Copy ALL templates for this review type
-        foreach ($templates as $originalTemplate) {
-            // Create a copy of the template for this audit
-            $auditTemplate = $originalTemplate->replicate();
-            $auditTemplate->name = $originalTemplate->name . ' (Audit: ' . $audit->name . ')';
-            $auditTemplate->review_type_id = $reviewType->id; // Make sure this is set
-            $auditTemplate->is_default = false;
-            $auditTemplate->save();
-            
-            $createdTemplates[] = $auditTemplate;
-
-            // Copy sections and questions for this template
-            foreach ($originalTemplate->sections as $originalSection) {
-                $auditSection = $originalSection->replicate();
-                $auditSection->template_id = $auditTemplate->id;
-                $auditSection->save();
-
-                // Copy questions for this section
-                foreach ($originalSection->questions as $originalQuestion) {
-                    $auditQuestion = $originalQuestion->replicate();
-                    $auditQuestion->section_id = $auditSection->id;
-                    $auditQuestion->save();
-                }
-            }
-        }
-
-        // For the pivot table, we'll use the first template as the primary one
-        // but the user will have access to all templates through the dashboard
-        $primaryTemplate = $createdTemplates[0];
-
-        // Attach the review type to the audit with the primary template
-        $audit->reviewTypes()->attach($request->review_type_id, [
-            'template_id' => $primaryTemplate->id,
-            'created_at' => now(),
-            'updated_at' => now()
+        // Simply create attachment record - no copying!
+        \App\Models\AuditReviewTypeAttachment::create([
+            'audit_id' => $audit->id,
+            'review_type_id' => $reviewTypeId
         ]);
 
+        $reviewType = ReviewType::findOrFail($reviewTypeId);
+        $templateCount = Template::where('review_type_id', $reviewTypeId)
+            ->whereNull('audit_id')
+            ->where('is_active', true)
+            ->count();
+        
         return redirect()->route('admin.audits.dashboard', $audit)
-            ->with('success', 'Review type attached successfully with ' . count($createdTemplates) . ' template(s) and all their sections and questions.');
+            ->with('success', "Review type '{$reviewType->name}' attached with {$templateCount} templates. No duplication!");
     }
 
     /**
@@ -389,9 +359,23 @@ class AuditController extends Controller
             'is_active' => true,
         ];
 
-        // Handle options for select and yes_no types
+        // Handle options based on response type
         if ($request->options) {
             $data['options'] = json_decode($request->options, true);
+        } else {
+            // Set default options based on response type
+            switch ($request->response_type) {
+                case 'yes_no':
+                    $data['options'] = ['Yes', 'No'];
+                    break;
+                case 'select':
+                    // If creating select but no options provided, set a default
+                    $data['options'] = ['Option 1'];
+                    break;
+                default:
+                    $data['options'] = null;
+                    break;
+            }
         }
 
         Question::create($data);
@@ -429,11 +413,23 @@ class AuditController extends Controller
             'order' => $request->order,
         ];
 
-        // Handle options for select and yes_no types
+        // Handle options based on response type
         if ($request->options) {
             $data['options'] = json_decode($request->options, true);
         } else {
-            $data['options'] = null;
+            // Set default options based on response type
+            switch ($request->response_type) {
+                case 'yes_no':
+                    $data['options'] = ['Yes', 'No'];
+                    break;
+                case 'select':
+                    // If changing to select but no options provided, set a default
+                    $data['options'] = ['Option 1'];
+                    break;
+                default:
+                    $data['options'] = null;
+                    break;
+            }
         }
 
         $question->update($data);

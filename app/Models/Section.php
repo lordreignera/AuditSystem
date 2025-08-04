@@ -11,6 +11,7 @@ class Section extends Model
 
     protected $fillable = [
         'template_id',
+        'audit_id',
         'name',
         'description',
         'order',
@@ -27,6 +28,14 @@ class Section extends Model
     public function template()
     {
         return $this->belongsTo(Template::class);
+    }
+
+    /**
+     * Get the audit that owns the section (for audit-specific sections).
+     */
+    public function audit()
+    {
+        return $this->belongsTo(Audit::class);
     }
 
     /**

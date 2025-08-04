@@ -21,33 +21,183 @@ function showTemplateInfo() {
 
 function toggleQuestionOptions() {
     const responseType = document.getElementById('response_type').value;
-    const optionsContainer = document.getElementById('options_container');
+    const yesNoContainer = document.getElementById('yes_no_options_container');
+    const selectContainer = document.getElementById('select_options_container');
+    const advancedContainer = document.getElementById('advanced_options_container');
     
-    if (responseType === 'select' || responseType === 'yes_no') {
-        optionsContainer.style.display = 'block';
-        if (responseType === 'yes_no') {
-            document.getElementById('options').value = '["Yes", "No"]';
-        }
-    } else {
-        optionsContainer.style.display = 'none';
-        document.getElementById('options').value = '';
+    // Hide all containers first
+    yesNoContainer.style.display = 'none';
+    selectContainer.style.display = 'none';
+    advancedContainer.style.display = 'none';
+    
+    if (responseType === 'yes_no') {
+        yesNoContainer.style.display = 'block';
+        updateOptionsFromYesNo();
+    } else if (responseType === 'select') {
+        selectContainer.style.display = 'block';
+        updateOptionsFromSelect();
     }
+    
+    // Always update the hidden options field
+    updateOptionsField();
 }
 
 function toggleEditQuestionOptions() {
     const responseType = document.getElementById('edit_response_type').value;
-    const optionsContainer = document.getElementById('edit_options_container');
+    const yesNoContainer = document.getElementById('edit_yes_no_options_container');
+    const selectContainer = document.getElementById('edit_select_options_container');
+    const advancedContainer = document.getElementById('edit_advanced_options_container');
     
-    if (responseType === 'select' || responseType === 'yes_no') {
-        optionsContainer.style.display = 'block';
-        if (responseType === 'yes_no') {
-            document.getElementById('edit_options').value = '["Yes", "No"]';
+    // Hide all containers first
+    yesNoContainer.style.display = 'none';
+    selectContainer.style.display = 'none';
+    advancedContainer.style.display = 'none';
+    
+    if (responseType === 'yes_no') {
+        yesNoContainer.style.display = 'block';
+        updateEditOptionsFromYesNo();
+    } else if (responseType === 'select') {
+        selectContainer.style.display = 'block';
+        updateEditOptionsFromSelect();
+    }
+    
+    // Always update the hidden options field
+    updateEditOptionsField();
+}
+
+// Add Question Modal Functions
+function updateOptionsFromYesNo() {
+    const yesOption = document.getElementById('yes_option').value || 'Yes';
+    const noOption = document.getElementById('no_option').value || 'No';
+    document.getElementById('options').value = JSON.stringify([yesOption, noOption]);
+}
+
+function updateOptionsFromSelect() {
+    const selectOptions = [];
+    document.querySelectorAll('.select-option').forEach(input => {
+        if (input.value.trim()) {
+            selectOptions.push(input.value.trim());
         }
+    });
+    document.getElementById('options').value = JSON.stringify(selectOptions);
+}
+
+function updateOptionsField() {
+    const responseType = document.getElementById('response_type').value;
+    if (responseType === 'yes_no') {
+        updateOptionsFromYesNo();
+    } else if (responseType === 'select') {
+        updateOptionsFromSelect();
     } else {
-        optionsContainer.style.display = 'none';
+        document.getElementById('options').value = '';
+    }
+}
+
+function addSelectOption() {
+    const container = document.getElementById('select_options_list');
+    const optionCount = container.children.length + 1;
+    const optionDiv = document.createElement('div');
+    optionDiv.className = 'input-group mb-2';
+    optionDiv.innerHTML = `
+        <input type="text" class="form-control select-option" placeholder="Option ${optionCount}" onchange="updateOptionsFromSelect()">
+        <button class="btn btn-outline-danger" type="button" onclick="removeSelectOption(this)">
+            <i class="mdi mdi-delete"></i>
+        </button>
+    `;
+    container.appendChild(optionDiv);
+    updateOptionsFromSelect();
+}
+
+function removeSelectOption(button) {
+    const container = document.getElementById('select_options_list');
+    if (container.children.length > 1) {
+        button.parentElement.remove();
+        updateOptionsFromSelect();
+    }
+}
+
+// Edit Question Modal Functions
+function updateEditOptionsFromYesNo() {
+    const yesOption = document.getElementById('edit_yes_option').value || 'Yes';
+    const noOption = document.getElementById('edit_no_option').value || 'No';
+    document.getElementById('edit_options').value = JSON.stringify([yesOption, noOption]);
+}
+
+function updateEditOptionsFromSelect() {
+    const selectOptions = [];
+    document.querySelectorAll('.edit-select-option').forEach(input => {
+        if (input.value.trim()) {
+            selectOptions.push(input.value.trim());
+        }
+    });
+    document.getElementById('edit_options').value = JSON.stringify(selectOptions);
+}
+
+function updateEditOptionsField() {
+    const responseType = document.getElementById('edit_response_type').value;
+    if (responseType === 'yes_no') {
+        updateEditOptionsFromYesNo();
+    } else if (responseType === 'select') {
+        updateEditOptionsFromSelect();
+    } else {
         document.getElementById('edit_options').value = '';
     }
 }
+
+function addEditSelectOption() {
+    const container = document.getElementById('edit_select_options_list');
+    const optionCount = container.children.length + 1;
+    const optionDiv = document.createElement('div');
+    optionDiv.className = 'input-group mb-2';
+    optionDiv.innerHTML = `
+        <input type="text" class="form-control edit-select-option" placeholder="Option ${optionCount}" onchange="updateEditOptionsFromSelect()">
+        <button class="btn btn-outline-danger" type="button" onclick="removeEditSelectOption(this)">
+            <i class="mdi mdi-delete"></i>
+        </button>
+    `;
+    container.appendChild(optionDiv);
+    updateEditOptionsFromSelect();
+}
+
+function removeEditSelectOption(button) {
+    const container = document.getElementById('edit_select_options_list');
+    if (container.children.length > 1) {
+        button.parentElement.remove();
+        updateEditOptionsFromSelect();
+    }
+}
+
+// Advanced Options Toggle (for power users)
+function toggleAdvancedOptions() {
+    const simpleContainers = document.querySelectorAll('#yes_no_options_container, #select_options_container');
+    const advancedContainer = document.getElementById('advanced_options_container');
+    
+    simpleContainers.forEach(container => container.style.display = 'none');
+    advancedContainer.style.display = 'block';
+}
+
+function toggleEditAdvancedOptions() {
+    const simpleContainers = document.querySelectorAll('#edit_yes_no_options_container, #edit_select_options_container');
+    const advancedContainer = document.getElementById('edit_advanced_options_container');
+    
+    simpleContainers.forEach(container => container.style.display = 'none');
+    advancedContainer.style.display = 'block';
+}
+
+// Add event listeners for Yes/No option inputs
+document.addEventListener('DOMContentLoaded', function() {
+    // Add Question Modal
+    const yesOption = document.getElementById('yes_option');
+    const noOption = document.getElementById('no_option');
+    if (yesOption) yesOption.addEventListener('input', updateOptionsFromYesNo);
+    if (noOption) noOption.addEventListener('input', updateOptionsFromYesNo);
+    
+    // Edit Question Modal
+    const editYesOption = document.getElementById('edit_yes_option');
+    const editNoOption = document.getElementById('edit_no_option');
+    if (editYesOption) editYesOption.addEventListener('input', updateEditOptionsFromYesNo);
+    if (editNoOption) editNoOption.addEventListener('input', updateEditOptionsFromYesNo);
+});
 
 function addSection(templateId) {
     document.getElementById('add_section_template_id').value = templateId;
@@ -111,17 +261,54 @@ function editQuestion(questionId) {
     fetch(`/admin/api/questions/${questionId}`)
         .then(response => response.json())
         .then(question => {
+            // Basic fields
             document.getElementById('edit_question_id').value = question.id;
             document.getElementById('edit_question_text').value = question.question_text;
             document.getElementById('edit_response_type').value = question.response_type;
             document.getElementById('edit_is_required').checked = question.is_required;
             document.getElementById('edit_is_active').checked = question.is_active;
             document.getElementById('edit_order').value = question.order;
+            
+            // Handle options based on response type
             if (question.options && question.options.length > 0) {
                 document.getElementById('edit_options').value = JSON.stringify(question.options);
+                
+                if (question.response_type === 'yes_no' && question.options.length >= 2) {
+                    document.getElementById('edit_yes_option').value = question.options[0];
+                    document.getElementById('edit_no_option').value = question.options[1];
+                } else if (question.response_type === 'select') {
+                    // Clear existing select options
+                    const container = document.getElementById('edit_select_options_list');
+                    container.innerHTML = '';
+                    
+                    // Add each option
+                    question.options.forEach((option, index) => {
+                        const optionDiv = document.createElement('div');
+                        optionDiv.className = 'input-group mb-2';
+                        optionDiv.innerHTML = `
+                            <input type="text" class="form-control edit-select-option" value="${option}" onchange="updateEditOptionsFromSelect()">
+                            <button class="btn btn-outline-danger" type="button" onclick="removeEditSelectOption(this)">
+                                <i class="mdi mdi-delete"></i>
+                            </button>
+                        `;
+                        container.appendChild(optionDiv);
+                    });
+                    
+                    // Ensure at least one option exists
+                    if (question.options.length === 0) {
+                        addEditSelectOption();
+                    }
+                }
             } else {
                 document.getElementById('edit_options').value = '';
+                // Reset yes/no fields
+                document.getElementById('edit_yes_option').value = 'Yes';
+                document.getElementById('edit_no_option').value = 'No';
+                // Clear select options
+                const container = document.getElementById('edit_select_options_list');
+                container.innerHTML = '<div class="input-group mb-2"><input type="text" class="form-control edit-select-option" placeholder="Option 1" onchange="updateEditOptionsFromSelect()"><button class="btn btn-outline-danger" type="button" onclick="removeEditSelectOption(this)"><i class="mdi mdi-delete"></i></button></div>';
             }
+            
             toggleEditQuestionOptions();
             new bootstrap.Modal(document.getElementById('editQuestionModal')).show();
         })
@@ -178,7 +365,75 @@ function duplicateTemplate(templateId) {
     }
 }
 
-// IMPROVED Table manipulation for modals
+function duplicateReviewType(reviewTypeId) {
+    // Set the review type ID in the modal form
+    document.getElementById('duplicate_review_type_id').value = reviewTypeId;
+    
+    // Set the form action URL
+    const form = document.getElementById('duplicateLocationForm');
+    form.action = `{{ route('admin.audits.duplicate-review-type', $audit) }}`;
+    
+    // Clear any previous input
+    document.getElementById('location_name').value = '';
+    
+    // Show the modal
+    const modal = new bootstrap.Modal(document.getElementById('duplicateLocationModal'));
+    modal.show();
+}
+
+function renameLocation(attachmentId, currentName) {
+    // Set the attachment ID in the modal form
+    document.getElementById('rename_attachment_id').value = attachmentId;
+    
+    // Set the form action URL
+    const form = document.getElementById('renameLocationForm');
+    form.action = `{{ route('admin.audits.rename-location', $audit) }}`;
+    
+    // Pre-fill with current name
+    document.getElementById('rename_location_name').value = currentName || '';
+    
+    // Show the modal
+    const modal = new bootstrap.Modal(document.getElementById('renameLocationModal'));
+    modal.show();
+    
+    // Focus on the input field when modal is shown
+    document.getElementById('renameLocationModal').addEventListener('shown.bs.modal', function () {
+        document.getElementById('rename_location_name').focus();
+        document.getElementById('rename_location_name').select();
+    });
+}
+
+// Legacy function for backward compatibility
+function renameFacility(attachmentId, currentName) {
+    return renameLocation(attachmentId, currentName);
+}
+
+        function detachReviewType(reviewTypeId) {
+            // Set the review type ID in the modal form
+            document.getElementById('detach_review_type_id').value = reviewTypeId;
+            
+            // Set the form action
+            const form = document.getElementById('detachReviewTypeForm');
+            form.action = `/admin/audits/{{ $audit->id }}/detach-review-type`;
+            
+            // Show the modal
+            const modal = new bootstrap.Modal(document.getElementById('detachReviewTypeModal'));
+            modal.show();
+        }
+
+        function removeDuplicate(attachmentId, locationName) {
+            // Set the attachment ID in the modal form
+            document.getElementById('remove_attachment_id').value = attachmentId;
+            document.getElementById('remove_location_name').textContent = locationName;
+            
+            // Set the form action
+            const form = document.getElementById('removeDuplicateForm');
+            form.action = `/admin/audits/{{ $audit->id }}/remove-duplicate`;
+            
+            // Show the modal
+            const modal = new bootstrap.Modal(document.getElementById('removeDuplicateModal'));
+            modal.show();
+        }// IMPROVED Table manipulation for modals
 function addRow(questionId) {
     const table = document.getElementById('editableTable-' + questionId).getElementsByTagName('tbody')[0];
     if (!table) return;

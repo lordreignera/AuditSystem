@@ -168,8 +168,13 @@
                                                                 <select name="responses[{{ $question->id }}]" 
                                                                         class="form-control">
                                                                     <option value="">Select...</option>
-                                                                    <option value="Yes" {{ old('responses.'.$question->id) == 'Yes' ? 'selected' : '' }}>Yes</option>
-                                                                    <option value="No" {{ old('responses.'.$question->id) == 'No' ? 'selected' : '' }}>No</option>
+                                                                    @if($question->options && is_array($question->options) && count($question->options) >= 2)
+                                                                        <option value="{{ $question->options[0] }}" {{ old('responses.'.$question->id) == $question->options[0] ? 'selected' : '' }}>{{ $question->options[0] }}</option>
+                                                                        <option value="{{ $question->options[1] }}" {{ old('responses.'.$question->id) == $question->options[1] ? 'selected' : '' }}>{{ $question->options[1] }}</option>
+                                                                    @else
+                                                                        <option value="Yes" {{ old('responses.'.$question->id) == 'Yes' ? 'selected' : '' }}>Yes</option>
+                                                                        <option value="No" {{ old('responses.'.$question->id) == 'No' ? 'selected' : '' }}>No</option>
+                                                                    @endif
                                                                 </select>
                                                                 @break
 

@@ -11,6 +11,7 @@ class Question extends Model
 
     protected $fillable = [
         'section_id',
+        'audit_id',
         'question_text',
         'response_type',
         'options',
@@ -41,6 +42,14 @@ class Question extends Model
     public function section()
     {
         return $this->belongsTo(Section::class);
+    }
+
+    /**
+     * Get the audit that owns the question (for audit-specific questions).
+     */
+    public function audit()
+    {
+        return $this->belongsTo(Audit::class);
     }
 
     /**

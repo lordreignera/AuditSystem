@@ -1,26 +1,9 @@
-@extends('admin.admin_layout')
+@extends('layouts.admin')
 
 @section('title', 'Audit Dashboard - ' . $audit->title)
+@section('page-title', 'Audit Dashboard')
 
 @section('content')
-<meta name="csrf-token" content="{{ csrf_token() }}">
-
-<!-- Breadcrumb -->
-<div class="row">
-    <div class="col-md-12">
-        <div class="page-title-box">
-            <div class="page-title-right">
-                <ol class="breadcrumb m-0">
-                    <li class="breadcrumb-item"><a href="{{ route('admin.dashboard') }}">Dashboard</a></li>
-                    <li class="breadcrumb-item"><a href="{{ route('admin.audits.index') }}">Audits</a></li>
-                    <li class="breadcrumb-item active">{{ $audit->title }}</li>
-                </ol>
-            </div>
-            <h4 class="page-title">Audit Dashboard: {{ $audit->title }}</h4>
-        </div>
-    </div>
-</div>
-
 <div class="container-fluid">
     <!-- Audit Information Card -->
     <div class="row mb-4">
@@ -201,10 +184,7 @@
 
                                         <!-- Template sections container -->
                                         <div id="sectionsContainer{{ $reviewType->id }}">
-                                            @include('admin.audit-management.audits.partials.sections', [
-                                                'reviewType' => $reviewType,
-                                                'audit' => $audit
-                                            ])
+                                            <!-- This will be populated via AJAX when location is selected -->
                                         </div>
                                     </div>
                                 </div>
@@ -223,7 +203,6 @@
             </div>
         </div>
     </div>
-</div>
 </div>
 
 <!-- modals -->
@@ -252,23 +231,35 @@ function switchLocation(reviewTypeId, attachmentId) {
         }
     });
     
-    // For now, reload the page to show the selected location
-    // This can be improved later with proper AJAX
-    const currentUrl = new URL(window.location);
-    currentUrl.searchParams.set('selected_attachment', attachmentId);
-    window.location.href = currentUrl.toString();
+    // Load sections content via AJAX
+    loadSectionsContent(reviewTypeId, attachmentId);
 }
 
 // Function to load sections content via AJAX
 function loadSectionsContent(reviewTypeId, attachmentId) {
-    console.log(`Direct content already loaded for reviewType: ${reviewTypeId}, attachment: ${attachmentId}`);
-    // Content is already included directly, no need for AJAX loading
+    const container = document.getElementById(`sectionsContainer${reviewTypeId}`);
+    container.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
+    
+    fetch(`{{ route('admin.audits.load-sections', $audit) }}?review_type_id=${reviewTypeId}&attachment_id=${attachmentId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                container.innerHTML = data.html;
+            } else {
+                container.innerHTML = '<div class="alert alert-danger">Error loading content: ' + data.message + '</div>';
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            container.innerHTML = '<div class="alert alert-danger">Error loading content</div>';
+        });
 }
 
 // Initialize page - load master sections for each review type
 document.addEventListener('DOMContentLoaded', function() {
-    // Content is already loaded directly via include, no need for AJAX
-    console.log('Dashboard loaded with direct content');
+    @foreach($attachedReviewTypes as $reviewType)
+        loadSectionsContent({{ $reviewType->id }}, {{ $reviewType->attachmentId }});
+    @endforeach
 });
 </script>
 

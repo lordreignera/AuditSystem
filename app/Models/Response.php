@@ -11,6 +11,7 @@ class Response extends Model
 
     protected $fillable = [
         'audit_id',
+        'attachment_id',
         'question_id',
         'answer',
         'audit_note',
@@ -22,6 +23,14 @@ class Response extends Model
     protected $casts = [
         'answer' => 'array',
     ];
+
+    /**
+     * Get the audit review type attachment that owns the response.
+     */
+    public function attachment()
+    {
+        return $this->belongsTo(AuditReviewTypeAttachment::class, 'attachment_id');
+    }
 
     /**
      * Get the audit that owns the response.

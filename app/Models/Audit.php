@@ -56,6 +56,12 @@ class Audit extends Model
                     ->withTimestamps();
     }
 
+    // Relationship with AuditReviewTypeAttachments
+    public function attachments()
+    {
+        return $this->hasMany(AuditReviewTypeAttachment::class);
+    }
+
     // Get responses for this audit
     public function responses()
     {

@@ -175,15 +175,18 @@ Route::middleware([
         ]);
         
         // Additional audit routes
-        Route::get('audits/{audit}/dashboard', [\App\Http\Controllers\Admin\AuditController::class, 'dashboard'])
+        Route::get('audits/{audit}/dashboard', [\App\Http\Controllers\Admin\AuditManagement\AuditController::class, 'dashboard'])
             ->name('admin.audits.dashboard');
-        Route::post('audits/{audit}/attach-review-type', [\App\Http\Controllers\Admin\AuditController::class, 'attachReviewType'])
+        Route::post('audits/{audit}/attach-review-type', [\App\Http\Controllers\Admin\AuditManagement\AuditController::class, 'attachReviewType'])
             ->name('admin.audits.attach-review-type');
-        Route::post('audits/{audit}/detach-review-type', [\App\Http\Controllers\Admin\AuditController::class, 'detachReviewType'])
+        Route::post('audits/{audit}/detach-review-type', [\App\Http\Controllers\Admin\AuditManagement\AuditController::class, 'detachReviewType'])
             ->name('admin.audits.detach-review-type');
+        // Sync audit table structures with default template
+        Route::post('audits/{audit}/sync-table-structures/{reviewTypeId}', [\App\Http\Controllers\Admin\AuditManagement\AuditController::class, 'syncAuditTableStructures'])
+            ->name('admin.audits.sync-table-structures');
         
         // Section management routes
-        Route::post('audits/{audit}/add-section', [\App\Http\Controllers\Admin\AuditController::class, 'addSection'])
+        Route::post('audits/{audit}/add-section', [\App\Http\Controllers\Admin\AuditManagement\AuditController::class, 'addSection'])
             ->name('admin.audits.add-section');
         Route::put('audits/{audit}/update-section', [\App\Http\Controllers\Admin\AuditController::class, 'updateSection'])
             ->name('admin.audits.update-section');
@@ -191,11 +194,11 @@ Route::middleware([
             ->name('admin.audits.delete-section');
         
         // Question management routes
-        Route::post('audits/{audit}/add-question', [\App\Http\Controllers\Admin\AuditController::class, 'addQuestion'])
+        Route::post('audits/{audit}/add-question', [\App\Http\Controllers\Admin\AuditManagement\AuditController::class, 'addQuestion'])
             ->name('admin.audits.add-question');
-        Route::put('audits/{audit}/update-question', [\App\Http\Controllers\Admin\AuditController::class, 'updateQuestion'])
+        Route::put('audits/{audit}/update-question', [\App\Http\Controllers\Admin\AuditManagement\AuditController::class, 'updateQuestion'])
             ->name('admin.audits.update-question');
-        Route::delete('audits/{audit}/delete-question', [\App\Http\Controllers\Admin\AuditController::class, 'deleteQuestion'])
+        Route::delete('audits/{audit}/delete-question', [\App\Http\Controllers\Admin\AuditManagement\AuditController::class, 'deleteQuestion'])
             ->name('admin.audits.delete-question');
         
         // Template management routes
@@ -203,6 +206,16 @@ Route::middleware([
             ->name('admin.audits.update-template');
         Route::post('audits/{audit}/duplicate-template', [\App\Http\Controllers\Admin\AuditController::class, 'duplicateTemplate'])
             ->name('admin.audits.duplicate-template');
+        Route::post('audits/{audit}/duplicate-review-type', [\App\Http\Controllers\Admin\AuditManagement\AuditController::class, 'duplicateReviewType'])
+            ->name('admin.audits.duplicate-review-type');
+        Route::post('audits/{audit}/rename-facility', [\App\Http\Controllers\Admin\AuditManagement\AuditController::class, 'renameFacility'])
+            ->name('admin.audits.rename-facility');
+        Route::post('audits/{audit}/rename-location', [\App\Http\Controllers\Admin\AuditManagement\AuditController::class, 'renameLocation'])
+            ->name('admin.audits.rename-location');
+        Route::post('audits/{audit}/remove-duplicate', [\App\Http\Controllers\Admin\AuditManagement\AuditController::class, 'removeDuplicate'])
+            ->name('admin.audits.remove-duplicate');
+        Route::get('audits/{audit}/load-sections', [\App\Http\Controllers\Admin\AuditManagement\AuditController::class, 'loadSections'])
+            ->name('admin.audits.load-sections');
         
         // API routes for AJAX requests
         Route::get('api/templates/{template}', function(\App\Models\Template $template) {

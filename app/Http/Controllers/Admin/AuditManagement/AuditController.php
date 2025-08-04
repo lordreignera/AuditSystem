@@ -9,6 +9,9 @@ use App\Models\ReviewType;
 use App\Models\Template;
 use App\Models\Section;
 use App\Models\Question;
+use App\Models\AuditReviewTypeAttachment;
+use App\Models\AuditTemplateCustomization;
+use App\Models\AuditQuestionCustomization;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use App\Models\Response;
@@ -91,37 +94,140 @@ class AuditController extends Controller
     }
 
     /**
-     * Show audit dashboard for managing review types, templates, sections, and questions
+     * Show audit dashboard for managing review types, templates, sections, and questions - NEW APPROACH
      */
     public function dashboard(Audit $audit)
     {
         $audit->load([
             'country',
-            'reviewTypes',
             'responses'
         ]);
 
-        // Get all available review types for adding new ones
-        $availableReviewTypes = ReviewType::where('is_active', true)->with('templates')->get();
+        // Get all available review types for adding new ones - ONLY with default templates
+        $availableReviewTypes = ReviewType::where('is_active', true)
+            ->with(['templates' => function($query) {
+                $query->whereNull('audit_id') // ONLY DEFAULT TEMPLATES
+                      ->where('is_active', true);
+            }])
+            ->get();
 
-        // Get existing responses grouped by question
+        // Get existing responses grouped by attachment and question
+        // This ensures responses are isolated between master and duplicates
         $existingResponses = collect();
         if ($audit->responses) {
-            $existingResponses = $audit->responses->keyBy('question_id');
+            $existingResponses = $audit->responses->groupBy('attachment_id');
         }
 
-        // Get all templates for attached review types, but only those created for this audit
-        $attachedReviewTypes = $audit->reviewTypes;
-        foreach ($attachedReviewTypes as $reviewType) {
+        // Get attached review types through the new attachment system
+        $attachments = AuditReviewTypeAttachment::where('audit_id', $audit->id)
+            ->with('reviewType')
+            ->orderBy('review_type_id')
+            ->orderBy('duplicate_number')
+            ->get();
+            
+        $attachedReviewTypes = collect();
+        
+        // Group attachments by review_type_id to handle master-duplicate relationships
+        $reviewTypeGroups = $attachments->groupBy('review_type_id');
+        
+        foreach ($reviewTypeGroups as $reviewTypeId => $groupAttachments) {
+            // Find the master attachment (should be the first one when ordered by duplicate_number)
+            $masterAttachment = $groupAttachments->where('master_attachment_id', null)->first();
+            
+            if (!$masterAttachment) {
+                \Log::warning("Audit {$audit->id} has attachments for review type {$reviewTypeId} but no master attachment!");
+                continue;
+            }
+            
+            $reviewType = $masterAttachment->reviewType;
+            
+            // Add master information
+            $reviewType->attachmentId = $masterAttachment->id;
+            $reviewType->isMaster = true;
+            $reviewType->isDuplicate = false;
+            $reviewType->duplicateNumber = $masterAttachment->duplicate_number;
+            $reviewType->locationName = $masterAttachment->getContextualLocationName();
+            $reviewType->masterAttachmentId = null;
+            
+            // Get templates (masters and duplicates share the same templates)
             $auditTemplates = Template::where('review_type_id', $reviewType->id)
                 ->where('audit_id', $audit->id)
-                ->with('sections.questions')
+                ->where('is_active', true)
+                ->with(['sections.questions'])
                 ->get();
-
+            
+            // If no audit-specific templates exist, this attachment is broken - skip it
+            if ($auditTemplates->isEmpty()) {
+                \Log::warning("Audit {$audit->id} has attachment for review type {$reviewType->id} but no audit-specific templates!");
+                continue;
+            }
+            
             $reviewType->auditTemplates = $auditTemplates;
+            
+            // Add duplicate information
+            $duplicates = $groupAttachments->where('master_attachment_id', '!=', null)->sortBy('duplicate_number');
+            $reviewType->duplicates = $duplicates->map(function($duplicate) {
+                return (object)[
+                    'attachmentId' => $duplicate->id,
+                    'duplicateNumber' => $duplicate->duplicate_number,
+                    'locationName' => $duplicate->getContextualLocationName(),
+                    'masterAttachmentId' => $duplicate->master_attachment_id
+                ];
+            });
+            
+            $attachedReviewTypes->push($reviewType);
         }
 
-        return view('admin.audit-management.audits.dashboard', compact('audit', 'availableReviewTypes', 'existingResponses', 'attachedReviewTypes'));
+        return view('admin.audit-management.audits.dashboard-original', compact('audit', 'availableReviewTypes', 'existingResponses', 'attachedReviewTypes'));
+    }
+
+    /**
+     * Sync all audit-specific questions' options with the default template's questions for a given audit and review type.
+     * This will overwrite the options (table structure) for all audit-specific questions to match the default template.
+     */
+    public function syncAuditTableStructures(Request $request, Audit $audit, $reviewTypeId)
+    {
+        // Get default templates for this review type (not audit-specific)
+        $defaultTemplates = Template::where('review_type_id', $reviewTypeId)
+            ->whereNull('audit_id')
+            ->with('sections.questions')
+            ->get();
+
+        // Get audit-specific templates for this review type
+        $auditTemplates = Template::where('review_type_id', $reviewTypeId)
+            ->where('audit_id', $audit->id)
+            ->with('sections.questions')
+            ->get();
+
+        // Map default questions by a unique key (e.g., section order + question order)
+        $defaultQuestions = [];
+        foreach ($defaultTemplates as $template) {
+            foreach ($template->sections as $section) {
+                foreach ($section->questions as $question) {
+                    $key = $template->order . '-' . $section->order . '-' . $question->order;
+                    $defaultQuestions[$key] = $question;
+                }
+            }
+        }
+
+        // Update audit-specific questions' options to match default
+        foreach ($auditTemplates as $template) {
+            foreach ($template->sections as $section) {
+                foreach ($section->questions as $question) {
+                    $key = $template->order . '-' . $section->order . '-' . $question->order;
+                    if (isset($defaultQuestions[$key])) {
+                        $defaultOptions = is_array($defaultQuestions[$key]->options)
+                            ? $defaultQuestions[$key]->options
+                            : (json_decode($defaultQuestions[$key]->options, true) ?: []);
+                        $question->options = json_encode($defaultOptions);
+                        $question->save();
+                    }
+                }
+            }
+        }
+
+        return redirect()->route('admin.audits.dashboard', $audit)
+            ->with('success', 'Audit table structures synced with default template.');
     }
 
     /**
@@ -182,7 +288,7 @@ class AuditController extends Controller
     }
 
     /**
-     * Attach a review type to the audit
+     * Attach a review type to the audit - NEW APPROACH
      */
     public function attachReviewType(Request $request, Audit $audit)
     {
@@ -194,68 +300,78 @@ class AuditController extends Controller
             return redirect()->back()->withErrors($validator)->withInput();
         }
 
-        $reviewType = ReviewType::findOrFail($request->review_type_id);
+        $reviewTypeId = $request->review_type_id;
+        
+        try {
+            // Check if already attached
+            $existingAttachment = AuditReviewTypeAttachment::where('audit_id', $audit->id)
+                ->where('review_type_id', $reviewTypeId)
+                ->first();
+                
+            if ($existingAttachment) {
+                return redirect()->back()->with('error', 'This review type is already attached to this audit.');
+            }
+            
+            // Create the master attachment record
+            $attachment = AuditReviewTypeAttachment::create([
+                'audit_id' => $audit->id,
+                'review_type_id' => $reviewTypeId,
+                'master_attachment_id' => null, // This is the master
+                'duplicate_number' => 1, // Master is always 1
+                'location_name' => null // Will be set contextually based on review type
+            ]);
 
-        // Get all default templates (not audit-specific)
-        $templates = $reviewType->templates()->where('is_active', true)->whereNull('audit_id')->with('sections.questions')->get();
+            // Get all default templates for this review type
+            $defaultTemplates = Template::where('review_type_id', $reviewTypeId)
+                ->whereNull('audit_id') // Default templates only
+                ->where('is_active', true)
+                ->with(['sections.questions'])
+                ->get();
 
-        if ($templates->isEmpty()) {
-            return redirect()->back()->with('error', 'No active templates found for this review type.');
-        }
+            if ($defaultTemplates->isEmpty()) {
+                return redirect()->back()->with('error', 'No active templates found for this review type.');
+            }
 
-        // Check if this review type is already attached to this audit
-        if ($audit->reviewTypes()->where('review_type_id', $request->review_type_id)->exists()) {
-            return redirect()->back()->with('error', 'This review type is already attached to this audit.');
-        }
+            // Create audit-specific copies of all templates, sections, and questions
+            foreach ($defaultTemplates as $defaultTemplate) {
+                // Create audit-specific template copy
+                $auditTemplate = $defaultTemplate->replicate();
+                $auditTemplate->audit_id = $audit->id;
+                $auditTemplate->is_default = false;
+                $auditTemplate->name = $defaultTemplate->name; // Keep original name for first instance
+                $auditTemplate->save();
 
-        $createdTemplates = [];
+                // Copy all sections for this template
+                foreach ($defaultTemplate->sections as $defaultSection) {
+                    $auditSection = $defaultSection->replicate();
+                    $auditSection->template_id = $auditTemplate->id;
+                    $auditSection->audit_id = $audit->id;
+                    $auditSection->save();
 
-        foreach ($templates as $originalTemplate) {
-            // Create a copy of the template for this audit
-            $auditTemplate = $originalTemplate->replicate();
-            $auditTemplate->name = $originalTemplate->name;
-            $auditTemplate->review_type_id = $reviewType->id;
-            $auditTemplate->is_default = false;
-            $auditTemplate->audit_id = $audit->id;
-            $auditTemplate->save();
-
-            $createdTemplates[] = $auditTemplate;
-
-            // Copy sections and questions for this template
-            foreach ($originalTemplate->sections as $originalSection) {
-                $auditSection = $originalSection->replicate();
-                $auditSection->template_id = $auditTemplate->id;
-                $auditSection->audit_id = $audit->id;
-                $auditSection->save();
-
-                // Copy questions for this section
-                foreach ($originalSection->questions as $originalQuestion) {
-                    $auditQuestion = $originalQuestion->replicate();
-                    $auditQuestion->section_id = $auditSection->id;
-                    $auditQuestion->audit_id = $audit->id;
-                    // --- CRITICAL: Deep copy the options field as JSON string, unless already string ---
-                    $auditQuestion->options = is_array($originalQuestion->options) ? json_encode($originalQuestion->options) : $originalQuestion->options;
-                    $auditQuestion->save();
+                    // Copy all questions for this section
+                    foreach ($defaultSection->questions as $defaultQuestion) {
+                        $auditQuestion = $defaultQuestion->replicate();
+                        $auditQuestion->section_id = $auditSection->id;
+                        $auditQuestion->audit_id = $audit->id;
+                        $auditQuestion->save();
+                    }
                 }
             }
+
+            $reviewType = ReviewType::findOrFail($reviewTypeId);
+            $templateCount = $defaultTemplates->count();
+            
+            return redirect()->route('admin.audits.dashboard', $audit)
+                ->with('success', "Review type '{$reviewType->name}' attached successfully with {$templateCount} template(s). Audit-specific copies created to protect default templates!");
+                
+        } catch (\Exception $e) {
+            \Log::error('Error attaching review type: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'An error occurred while attaching the review type: ' . $e->getMessage());
         }
-
-        // For the pivot table, use the first template as the primary one
-        $primaryTemplate = $createdTemplates[0];
-
-        // Attach the review type to the audit with the primary template
-        $audit->reviewTypes()->attach($request->review_type_id, [
-            'template_id' => $primaryTemplate->id,
-            'created_at' => now(),
-            'updated_at' => now()
-        ]);
-
-        return redirect()->route('admin.audits.dashboard', $audit)
-            ->with('success', 'Review type attached successfully with ' . count($createdTemplates) . ' template(s) and all their sections and questions.');
     }
 
     /**
-     * Remove a review type from the audit
+     * Detach a review type from the audit - NEW APPROACH
      */
     public function detachReviewType(Request $request, Audit $audit)
     {
@@ -267,24 +383,67 @@ class AuditController extends Controller
             return redirect()->back()->withErrors($validator)->withInput();
         }
 
-        // Remove all templates, sections, questions for this audit/review_type
-        $templates = Template::where('review_type_id', $request->review_type_id)
-            ->where('audit_id', $audit->id)
-            ->get();
-        foreach ($templates as $template) {
-            foreach ($template->sections as $section) {
-                foreach ($section->questions as $question) {
-                    $question->delete();
-                }
-                $section->delete();
+        $reviewTypeId = $request->review_type_id;
+        
+        try {
+            // Find ALL attachments for this review type (master + duplicates)
+            $attachments = AuditReviewTypeAttachment::where('audit_id', $audit->id)
+                ->where('review_type_id', $reviewTypeId)
+                ->get();
+                
+            if ($attachments->isEmpty()) {
+                return redirect()->back()->with('error', 'This review type is not attached to this audit.');
             }
-            $template->delete();
+            
+            $attachmentCount = $attachments->count();
+            
+            // Delete all audit-specific templates, sections, and questions for this review type
+            // Since duplicates share the same templates as master, we only need to delete templates once
+            $auditTemplates = Template::where('review_type_id', $reviewTypeId)
+                ->where('audit_id', $audit->id)
+                ->get();
+                
+            foreach ($auditTemplates as $template) {
+                // Delete all responses for questions in this template (from all attachments)
+                foreach ($template->sections as $section) {
+                    foreach ($section->questions as $question) {
+                        $question->responses()->where('audit_id', $audit->id)->delete();
+                    }
+                }
+                
+                // Delete the template (cascade will handle sections and questions)
+                $template->delete();
+            }
+            
+            // Delete ALL attachment records (master + duplicates)
+            foreach ($attachments as $attachment) {
+                $attachment->delete();
+            }
+            
+            // Clean up any legacy customizations (if they exist)
+            AuditTemplateCustomization::where('audit_id', $audit->id)
+                ->whereHas('defaultTemplate', function($query) use ($reviewTypeId) {
+                    $query->where('review_type_id', $reviewTypeId);
+                })
+                ->delete();
+                
+            AuditQuestionCustomization::where('audit_id', $audit->id)
+                ->whereHas('defaultQuestion.section.template', function($query) use ($reviewTypeId) {
+                    $query->where('review_type_id', $reviewTypeId);
+                })
+                ->delete();
+
+            $reviewType = ReviewType::findOrFail($reviewTypeId);
+            
+            $locationInfo = $attachmentCount > 1 ? " (including {$attachmentCount} locations)" : "";
+            
+            return redirect()->route('admin.audits.dashboard', $audit)
+                ->with('success', "Review type '{$reviewType->name}' detached successfully{$locationInfo}. Default templates remain intact!");
+                
+        } catch (\Exception $e) {
+            \Log::error('Error detaching review type: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'An error occurred while detaching the review type: ' . $e->getMessage());
         }
-
-        $audit->reviewTypes()->detach($request->review_type_id);
-
-        return redirect()->route('admin.audits.dashboard', $audit)
-            ->with('success', 'Review type and its templates removed successfully.');
     }
 
     /**
@@ -393,8 +552,11 @@ class AuditController extends Controller
             'is_active' => true,
         ];
 
+        // Handle options - keep it simple, just save what's provided
         if ($request->options) {
             $data['options'] = json_decode($request->options, true);
+        } else {
+            $data['options'] = null;
         }
 
         Question::create($data);
@@ -429,6 +591,7 @@ class AuditController extends Controller
             'order' => $request->order,
         ];
 
+        // Handle options - keep it simple, just save what's provided
         if ($request->options) {
             $data['options'] = json_decode($request->options, true);
         } else {
@@ -524,8 +687,10 @@ class AuditController extends Controller
     {
         $request->validate([
             'audit_id' => 'required|exists:audits,id',
+            'attachment_id' => 'required|exists:audit_review_type_attachments,id',
             'answers' => 'required|array',
         ]);
+
 
         foreach ($request->answers as $questionId => $data) {
             // Handle table questions: Save as JSON if 'table' present
@@ -535,9 +700,21 @@ class AuditController extends Controller
                 $answer = $data['answer'] ?? '';
             }
 
+            // Update header_rows in question options if present
+            if (isset($data['header_rows'])) {
+                $question = Question::find($questionId);
+                if ($question) {
+                    $options = is_array($question->options) ? $question->options : (json_decode($question->options, true) ?: []);
+                    $options['header_rows'] = (int)$data['header_rows'];
+                    $question->options = json_encode($options);
+                    $question->save();
+                }
+            }
+
             Response::updateOrCreate(
                 [
                     'audit_id' => $request->audit_id,
+                    'attachment_id' => $request->attachment_id,
                     'question_id' => $questionId,
                     'created_by' => auth()->id(),
                 ],
@@ -552,4 +729,203 @@ class AuditController extends Controller
         return redirect($request->input('redirect_to', route('admin.audits.show', $request->audit_id)))
             ->with('success', 'Response saved successfully.');
     }
-};
+
+    public function duplicateReviewType(Request $request, Audit $audit)
+    {
+        $validator = Validator::make($request->all(), [
+            'review_type_id' => 'required|exists:review_types,id',
+            'location_name' => 'nullable|string|max:255',
+        ]);
+
+        if ($validator->fails()) {
+            return redirect()->back()->withErrors($validator)->withInput();
+        }
+
+        $reviewTypeId = $request->review_type_id;
+        
+        // Find the master attachment for this review type
+        $masterAttachment = AuditReviewTypeAttachment::where('audit_id', $audit->id)
+            ->where('review_type_id', $reviewTypeId)
+            ->where('duplicate_number', 1)
+            ->whereNull('master_attachment_id')
+            ->first();
+
+        if (!$masterAttachment) {
+            return redirect()->back()->with('error', 'Master attachment not found for this review type.');
+        }
+
+        // Get the next duplicate number
+        $nextDuplicateNumber = AuditReviewTypeAttachment::where('audit_id', $audit->id)
+            ->where('review_type_id', $reviewTypeId)
+            ->max('duplicate_number') + 1;
+
+        // Create the duplicate attachment record
+        $duplicateAttachment = AuditReviewTypeAttachment::create([
+            'audit_id' => $audit->id,
+            'review_type_id' => $reviewTypeId,
+            'master_attachment_id' => $masterAttachment->id,
+            'duplicate_number' => $nextDuplicateNumber,
+            'location_name' => $request->location_name
+        ]);
+
+        // Duplicates share the same templates/sections/questions as master
+        // No need to create copies - they will reference the same structure
+        // Only responses will be separate for each duplicate
+
+        $locationName = $duplicateAttachment->getContextualLocationName();
+        return redirect()->route('admin.audits.dashboard', $audit)
+            ->with('success', "Review type duplicated successfully for {$locationName}. Shares same templates/structure as master, but responses are independent.");
+    }
+
+    public function renameLocation(Request $request, Audit $audit)
+    {
+        $validator = Validator::make($request->all(), [
+            'attachment_id' => 'required|exists:audit_review_type_attachments,id',
+            'location_name' => 'required|string|max:255',
+        ]);
+
+        if ($validator->fails()) {
+            return redirect()->back()->withErrors($validator)->withInput();
+        }
+
+        $attachment = AuditReviewTypeAttachment::findOrFail($request->attachment_id);
+        
+        // Verify this attachment belongs to the current audit
+        if ($attachment->audit_id !== $audit->id) {
+            return redirect()->back()->with('error', 'Invalid attachment for this audit.');
+        }
+
+        // Only allow renaming duplicates (not masters) unless it's a single instance
+        if ($attachment->isMaster()) {
+            $duplicateCount = AuditReviewTypeAttachment::where('audit_id', $audit->id)
+                ->where('review_type_id', $attachment->review_type_id)
+                ->where('duplicate_number', '>', 1)
+                ->count();
+                
+            if ($duplicateCount > 0) {
+                return redirect()->back()->with('error', 'Cannot rename master when duplicates exist. Only duplicates can be renamed.');
+            }
+        }
+
+        $attachment->update([
+            'location_name' => $request->location_name
+        ]);
+
+        return redirect()->route('admin.audits.dashboard', $audit)
+            ->with('success', "Location renamed to '{$request->location_name}' successfully.");
+    }
+
+    public function renameFacility(Request $request, Audit $audit)
+    {
+        // Legacy method - redirect to new renameLocation method
+        return $this->renameLocation($request, $audit);
+    }
+
+    /**
+     * Remove a specific duplicate attachment (not the master)
+     */
+    public function removeDuplicate(Request $request, Audit $audit)
+    {
+        $request->validate([
+            'attachment_id' => 'required|exists:audit_review_type_attachments,id'
+        ]);
+
+        $attachment = AuditReviewTypeAttachment::findOrFail($request->attachment_id);
+
+        // Security check: ensure this attachment belongs to the audit
+        if ($attachment->audit_id !== $audit->id) {
+            return redirect()->back()->with('error', 'Attachment does not belong to this audit.');
+        }
+
+        // Security check: prevent removing master attachments
+        if ($attachment->isMaster()) {
+            return redirect()->back()->with('error', 'Cannot remove master attachment. Use detach to remove the entire review type.');
+        }
+
+        $locationName = $attachment->getContextualLocationName();
+
+        // Delete all responses for this specific attachment
+        Response::where('audit_id', $audit->id)
+            ->where('attachment_id', $attachment->id)
+            ->delete();
+
+        // Delete the attachment itself
+        $attachment->delete();
+
+        return redirect()->route('admin.audits.dashboard', $audit)
+            ->with('success', "Duplicate location '{$locationName}' has been removed successfully.");
+    }
+
+    /**
+     * Load sections content for a specific attachment via AJAX
+     */
+    public function loadSections(Request $request, Audit $audit)
+    {
+        $reviewTypeId = $request->input('review_type_id');
+        $attachmentId = $request->input('attachment_id');
+        
+        \Log::info("loadSections called", [
+            'audit_id' => $audit->id,
+            'review_type_id' => $reviewTypeId,
+            'attachment_id' => $attachmentId
+        ]);
+        
+        // Find the attachment
+        $attachment = AuditReviewTypeAttachment::where('audit_id', $audit->id)
+            ->where('id', $attachmentId)
+            ->where('review_type_id', $reviewTypeId)
+            ->first();
+        
+        if (!$attachment) {
+            \Log::warning("Attachment not found", [
+                'audit_id' => $audit->id,
+                'review_type_id' => $reviewTypeId,
+                'attachment_id' => $attachmentId
+            ]);
+            
+            // Let's also check what attachments DO exist for this audit
+            $existingAttachments = AuditReviewTypeAttachment::where('audit_id', $audit->id)->get();
+            \Log::info("Existing attachments for audit {$audit->id}", [
+                'attachments' => $existingAttachments->toArray()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => "Attachment not found. Audit ID: {$audit->id}, Review Type ID: {$reviewTypeId}, Attachment ID: {$attachmentId}"
+            ]);
+        }
+        
+        // Get templates for this review type
+        $auditTemplates = Template::where('review_type_id', $reviewTypeId)
+            ->where('audit_id', $audit->id)
+            ->where('is_active', true)
+            ->with(['sections.questions'])
+            ->get();
+        
+        // Create a simple review type object for the view
+        $reviewType = (object)[
+            'id' => $reviewTypeId,
+            'attachmentId' => $attachment->id,
+            'isMaster' => $attachment->isMaster(),
+            'isDuplicate' => $attachment->isDuplicate(),
+            'auditTemplates' => $auditTemplates
+        ];
+        
+        try {
+            $html = view('admin.audit-management.audits.partials.sections', [
+                'audit' => $audit,
+                'reviewType' => $reviewType
+            ])->render();
+            
+            return response()->json([
+                'success' => true,
+                'html' => $html
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error rendering sections: ' . $e->getMessage()
+            ]);
+        }
+    }
+}

@@ -21,13 +21,19 @@ class ReviewTypeCrudController extends Controller
     {
         $reviewTypes = ReviewType::with([
             'templates' => function($query) {
-                $query->where('is_active', true)->orderBy('name');
+                $query->where('is_active', true)
+                      ->whereNull('audit_id') // ONLY DEFAULT TEMPLATES
+                      ->orderBy('name');
             },
             'templates.sections' => function($query) {
-                $query->where('is_active', true)->orderBy('order');
+                $query->where('is_active', true)
+                      ->whereNull('audit_id') // ONLY DEFAULT SECTIONS
+                      ->orderBy('order');
             },
             'templates.sections.questions' => function($query) {
-                $query->where('is_active', true)->orderBy('order');
+                $query->where('is_active', true)
+                      ->whereNull('audit_id') // ONLY DEFAULT QUESTIONS
+                      ->orderBy('order');
             }
         ])->where('is_active', true)->get();
 
@@ -41,13 +47,19 @@ class ReviewTypeCrudController extends Controller
     {
         $reviewType->load([
             'templates' => function($query) {
-                $query->where('is_active', true)->orderBy('name');
+                $query->where('is_active', true)
+                      ->whereNull('audit_id') // ONLY DEFAULT TEMPLATES
+                      ->orderBy('name');
             },
             'templates.sections' => function($query) {
-                $query->where('is_active', true)->orderBy('order');
+                $query->where('is_active', true)
+                      ->whereNull('audit_id') // ONLY DEFAULT SECTIONS
+                      ->orderBy('order');
             },
             'templates.sections.questions' => function($query) {
-                $query->where('is_active', true)->orderBy('order');
+                $query->where('is_active', true)
+                      ->whereNull('audit_id') // ONLY DEFAULT QUESTIONS
+                      ->orderBy('order');
             }
         ]);
 
@@ -59,12 +71,21 @@ class ReviewTypeCrudController extends Controller
      */
     public function createAudit(ReviewType $reviewType, Template $template)
     {
+        // Ensure we're only working with default templates
+        if ($template->audit_id !== null) {
+            abort(403, 'Cannot create audit from audit-specific template.');
+        }
+        
         $template->load([
             'sections' => function($query) {
-                $query->where('is_active', true)->orderBy('order');
+                $query->where('is_active', true)
+                      ->whereNull('audit_id') // ONLY DEFAULT SECTIONS
+                      ->orderBy('order');
             },
             'sections.questions' => function($query) {
-                $query->where('is_active', true)->orderBy('order');
+                $query->where('is_active', true)
+                      ->whereNull('audit_id') // ONLY DEFAULT QUESTIONS
+                      ->orderBy('order');
             }
         ]);
 

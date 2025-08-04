@@ -11,6 +11,7 @@ class Template extends Model
 
     protected $fillable = [
         'review_type_id',
+        'audit_id',
         'name',
         'description',
         'is_default',
@@ -28,6 +29,14 @@ class Template extends Model
     public function reviewType()
     {
         return $this->belongsTo(ReviewType::class);
+    }
+
+    /**
+     * Get the audit that owns the template (for audit-specific templates).
+     */
+    public function audit()
+    {
+        return $this->belongsTo(Audit::class);
     }
 
     /**
