@@ -6,8 +6,8 @@
                 <p class="card-title">{{ $title }}</p>
                 <a href="{{ $viewAllUrl ?? '#' }}" class="text-info">View all</a>
             </div>
-            <div class="table-responsive">
-                <table class="table">
+            <div class="table-responsive data-table-container">
+                <table class="table table-striped">
                     <thead>
                         <tr>
                             @foreach($headers as $header)

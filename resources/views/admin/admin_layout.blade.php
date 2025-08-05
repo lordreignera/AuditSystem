@@ -168,6 +168,69 @@
             color: #2d3748 !important;
             font-weight: 500;
         }
+        
+        /* Fix dropdown issues */
+        .navbar .dropdown-menu {
+            background-color: #ffffff !important;
+            border: 1px solid #e2e8f0 !important;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+            border-radius: 8px !important;
+            padding: 0.5rem 0 !important;
+            z-index: 9999 !important;
+            display: none !important;
+            position: absolute !important;
+            min-width: 200px !important;
+        }
+        
+        .navbar .dropdown-menu.show {
+            display: block !important;
+        }
+        
+        .navbar .dropdown-item {
+            color: #2d3748 !important;
+            padding: 0.5rem 1rem !important;
+            display: flex !important;
+            align-items: center !important;
+            text-decoration: none !important;
+            background: transparent !important;
+            border: none !important;
+            width: 100% !important;
+            text-align: left !important;
+        }
+        
+        .navbar .dropdown-item:hover {
+            background-color: #f7fafc !important;
+            color: #2d3748 !important;
+        }
+        
+        .navbar .dropdown-header {
+            color: #718096 !important;
+            padding: 0.5rem 1rem !important;
+        }
+        
+        .navbar .dropdown-divider {
+            border-top: 1px solid #e2e8f0 !important;
+            margin: 0.25rem 0 !important;
+        }
+        
+        /* Ensure dropdown toggle works */
+        .navbar .nav-link.dropdown-toggle::after {
+            display: none !important;
+        }
+        
+        .navbar .dropdown-toggle {
+            cursor: pointer !important;
+        }
+        
+        /* Position dropdown correctly */
+        .navbar .nav-item.dropdown {
+            position: relative !important;
+        }
+        
+        .navbar .dropdown-menu-right {
+            right: 0 !important;
+            left: auto !important;
+        }
     </style>
 </head>
 <body>

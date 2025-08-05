@@ -94,36 +94,45 @@
       <div class="collapse" id="projects">
         <ul class="nav flex-column sub-menu">
           @can('view audits')
-          <li class="nav-item"><a class="nav-link" href="{{ route('admin.audits.index') }}"><i class="mdi mdi-view-list"></i> All Audits</a></li>
+            @unless(auth()->user()->hasRole('Auditor'))
+              <li class="nav-item"><a class="nav-link" href="{{ route('admin.audits.index') }}"><i class="mdi mdi-view-list"></i> All Audits</a></li>
+            @endunless
+            @if(auth()->user()->hasRole('Auditor'))
+              <li class="nav-item"><a class="nav-link" href="{{ route('admin.audits.index') }}"><i class="mdi mdi-account-check"></i> My Assigned Audits</a></li>
+            @endif
           @endcan
           @can('create audits')
           <li class="nav-item"><a class="nav-link" href="{{ route('admin.audits.create') }}"><i class="mdi mdi-plus-circle"></i> Create New Audit</a></li>
           @endcan
-          <hr>
-          @can('view audits')
-          @php
-            $reviewTypeLinks = [
-              ['name' => 'National Reviews', 'slug' => 'National'],
-              ['name' => 'Provincial Reviews', 'slug' => 'Province/region'],
-              ['name' => 'District Reviews', 'slug' => 'District'],
-              ['name' => 'Health Facility Reviews', 'slug' => 'Health Facility']
-            ];
-          @endphp
-          @foreach($reviewTypeLinks as $link)
+          
+          {{-- Hide review type links from auditors --}}
+          @unless(auth()->user()->hasRole('Auditor'))
+            <hr>
+            @can('view audits')
             @php
-              $reviewType = App\Models\ReviewType::where('name', $link['slug'])->first();
+              $reviewTypeLinks = [
+                ['name' => 'National Reviews', 'slug' => 'National'],
+                ['name' => 'Provincial Reviews', 'slug' => 'Province/region'],
+                ['name' => 'District Reviews', 'slug' => 'District'],
+                ['name' => 'Health Facility Reviews', 'slug' => 'Health Facility']
+              ];
             @endphp
-            @if($reviewType)
-              <li class="nav-item"><a class="nav-link" href="{{ route('admin.review-types-crud.show', $reviewType->id) }}">{{ $link['name'] }}</a></li>
-            @else
-              <li class="nav-item"><a class="nav-link" href="{{ route('admin.review-types-crud.index') }}">{{ $link['name'] }}</a></li>
-            @endif
-          @endforeach
-          @endcan
-          @can('manage review types')
-          <li class="nav-item"><a class="nav-link" href="{{ route('admin.review-types.index') }}">Manage Review Types</a></li>
-          <li class="nav-item"><a class="nav-link" href="{{ route('admin.review-types-crud.index') }}">Templates & Questions</a></li>
-          @endcan
+            @foreach($reviewTypeLinks as $link)
+              @php
+                $reviewType = App\Models\ReviewType::where('name', $link['slug'])->first();
+              @endphp
+              @if($reviewType)
+                <li class="nav-item"><a class="nav-link" href="{{ route('admin.review-types-crud.show', $reviewType->id) }}">{{ $link['name'] }}</a></li>
+              @else
+                <li class="nav-item"><a class="nav-link" href="{{ route('admin.review-types-crud.index') }}">{{ $link['name'] }}</a></li>
+              @endif
+            @endforeach
+            @endcan
+            @can('manage review types')
+            <li class="nav-item"><a class="nav-link" href="{{ route('admin.review-types.index') }}">Manage Review Types</a></li>
+            <li class="nav-item"><a class="nav-link" href="{{ route('admin.review-types-crud.index') }}">Templates & Questions</a></li>
+            @endcan
+          @endunless
         </ul>
       </div>
     </li>

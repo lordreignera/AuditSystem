@@ -8,7 +8,12 @@
         <div class="d-flex justify-content-between flex-wrap">
             <div class="d-flex align-items-end flex-wrap">
                 <div class="me-md-3 me-xl-5">
-                    <h2 class="mb-3 mb-md-0">Audit Management</h2>
+                    @role('Auditor')
+                        <h2 class="mb-3 mb-md-0">My Assigned Audits</h2>
+                        <p class="text-muted">Click on the Dashboard button to start or continue your audit work</p>
+                    @else
+                        <h2 class="mb-3 mb-md-0">Audit Management</h2>
+                    @endrole
                 </div>
             </div>
             @can('create audits')
@@ -138,12 +143,17 @@
                                     @endhasanyrole
                                         <div class="py-4">
                                             <i class="mdi mdi-clipboard-text mdi-48px text-muted"></i>
-                                            <p class="mt-2 text-muted">No audits found.</p>
-                                            @can('create audits')
-                                                <a href="{{ route('admin.audits.create') }}" class="btn btn-primary text-white">
-                                                    Create Your First Audit
-                                                </a>
-                                            @endcan
+                                            @role('Auditor')
+                                                <p class="mt-2 text-muted">No audits have been assigned to you yet.</p>
+                                                <p class="text-muted">Please contact your audit manager if you believe this is an error.</p>
+                                            @else
+                                                <p class="mt-2 text-muted">No audits found.</p>
+                                                @can('create audits')
+                                                    <a href="{{ route('admin.audits.create') }}" class="btn btn-primary text-white">
+                                                        Create Your First Audit
+                                                    </a>
+                                                @endcan
+                                            @endrole
                                         </div>
                                     </td>
                                 </tr>

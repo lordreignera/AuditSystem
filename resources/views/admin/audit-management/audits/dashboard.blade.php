@@ -1,80 +1,166 @@
 @extends('admin.admin_layout')
 
-@section('title', 'Audit Dashboard - ' . $audit->title)
+@section('title', 'Audit Dashboard - ' . $audit->name)
 
 @section('content')
 <meta name="csrf-token" content="{{ csrf_token() }}">
 
+<style>
+    /* Custom table styling for better appearance */
+    .table-editable {
+        border: 2px solid #dee2e6;
+        border-radius: 8px;
+        overflow: hidden;
+        background-color: #ffffff !important;
+        color: #333333 !important;
+    }
+    
+    .table-editable th {
+        background-color: #f8f9fa !important;
+        border: 1px solid #dee2e6;
+        padding: 12px 8px;
+        font-weight: 600;
+        color: #495057 !important;
+    }
+    
+    .table-editable td {
+        background-color: #ffffff !important;
+        border: 1px solid #dee2e6;
+        padding: 8px;
+        color: #333333 !important;
+    }
+    
+    .table-editable input {
+        min-height: 38px;
+        transition: all 0.2s ease;
+        background-color: #ffffff !important;
+        color: #212529 !important;
+    }
+    
+    .table-editable input:focus {
+        background-color: #fff3cd !important;
+        box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.25) !important;
+        border: 1px solid #0d6efd !important;
+    }
+    
+    .table-editable th input {
+        font-weight: 600;
+        color: #495057 !important;
+        background-color: #ffffff !important;
+    }
+    
+    /* Header rows input styling */
+    .header-rows-input {
+        max-width: 100px;
+        display: inline-block;
+    }
+    
+    /* Modal improvements */
+    .modal-xl {
+        max-width: 95%;
+    }
+    
+    .modal-body {
+        background-color: #ffffff !important;
+    }
+    
+    .table-responsive {
+        background-color: #ffffff !important;
+    }
+    
+    /* Button improvements */
+    .table-action-buttons {
+        background-color: #f8f9fa;
+        padding: 15px;
+        border-radius: 6px;
+        margin: 15px 0;
+    }
+
+    /* Force table text visibility - Additional Override */
+    .table, .table * {
+        color: #333333 !important;
+    }
+    
+    .table thead th {
+        background-color: #f8f9fa !important;
+        color: #495057 !important;
+        border-bottom: 2px solid #dee2e6 !important;
+    }
+    
+    .table tbody td {
+        background-color: #ffffff !important;
+        color: #333333 !important;
+        border-bottom: 1px solid #dee2e6 !important;
+    }
+
+    /* Specific styling for table cells with content */
+    .table td, .table th {
+        color: #333333 !important;
+        font-weight: 500;
+        padding: 12px 8px;
+    }
+
+    /* Override any inherited styles */
+    .card-body .table,
+    .card-body .table td,
+    .card-body .table th {
+        color: #333333 !important;
+        background-color: #ffffff !important;
+    }
+</style>
+
 <!-- Breadcrumb -->
 <div class="row">
     <div class="col-md-12">
-        <div class="page-title-box">
-            <div class="page-title-right">
-                <ol class="breadcrumb m-0">
-                    <li class="breadcrumb-item"><a href="{{ route('admin.dashboard') }}">Dashboard</a></li>
-                    <li class="breadcrumb-item"><a href="{{ route('admin.audits.index') }}">Audits</a></li>
-                    <li class="breadcrumb-item active">{{ $audit->title }}</li>
-                </ol>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ route('admin.dashboard') }}">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="{{ route('admin.audits.index') }}">Audits</a></li>
+                <li class="breadcrumb-item active" aria-current="page">{{ $audit->name }}</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+<!-- Audit Header -->
+<div class="row">
+    <div class="col-md-12 grid-margin">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h3 class="mb-0 text-white">{{ $audit->name }}</h3>
+                        <p class="mb-0 text-white-50">
+                            <i class="mdi mdi-map-marker me-1"></i>{{ $audit->country->name }} | 
+                            <i class="mdi mdi-calendar me-1"></i>{{ $audit->start_date->format('M j, Y') }}
+                        </p>
+                    </div>
+                    <div class="text-end">
+                        <span class="badge badge-light">{{ $audit->review_code }}</span>
+                    </div>
+                </div>
             </div>
-            <h4 class="page-title">Audit Dashboard: {{ $audit->title }}</h4>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Description</h6>
+                        <p class="text-muted">{{ $audit->description ?? 'No description provided' }}</p>
+                    </div>
+                    <div class="col-md-3">
+                        <h6>Start Date</h6>
+                        <p class="text-muted">{{ $audit->start_date->format('M j, Y') }}</p>
+                    </div>
+                    <div class="col-md-3">
+                        <h6>End Date</h6>
+                        <p class="text-muted">{{ $audit->end_date ? $audit->end_date->format('M j, Y') : 'Not set' }}</p>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
 
-<div class="container-fluid">
-    <!-- Audit Information Card -->
-    <div class="row mb-4">
-        <div class="col-md-8">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">
-                        <i class="mdi mdi-clipboard-list-outline me-2"></i>
-                        {{ $audit->title }}
-                    </h5>
-                </div>
-                <div class="card-body">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <p><strong>Audit ID:</strong> {{ $audit->id }}</p>
-                            <p><strong>Country:</strong> {{ $audit->country->name }}</p>
-                            <p><strong>Created by:</strong> {{ $audit->creator->name }}</p>
-                        </div>
-                        <div class="col-md-6">
-                            <p><strong>Start Date:</strong> {{ $audit->start_date ? $audit->start_date->format('M d, Y') : 'Not set' }}</p>
-                            <p><strong>End Date:</strong> {{ $audit->end_date ? $audit->end_date->format('M d, Y') : 'Not set' }}</p>
-                            <p><strong>Status:</strong> 
-                                <span class="badge bg-{{ $audit->status === 'active' ? 'success' : ($audit->status === 'completed' ? 'primary' : 'secondary') }}">
-                                    {{ ucfirst($audit->status) }}
-                                </span>
-                            </p>
-                        </div>
-                    </div>
-                    @if($audit->description)
-                        <div class="mt-3">
-                            <strong>Description:</strong>
-                            <p class="text-muted">{{ $audit->description }}</p>
-                        </div>
-                    @endif
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card">
-                <div class="card-header">
-                    <h6 class="mb-0">Quick Actions</h6>
-                </div>
-                <div class="card-body">
-                    <a href="{{ route('admin.audits.edit', $audit) }}" class="btn btn-outline-primary btn-sm mb-2 w-100">
-                        <i class="mdi mdi-pencil me-1"></i>Edit Audit Details
-                    </a>
-                    <a href="{{ route('admin.audits.index') }}" class="btn btn-outline-secondary btn-sm w-100">
-                        <i class="mdi mdi-arrow-left me-1"></i>Back to Audits
-                    </a>
-                </div>
-            </div>
-        </div>
-    </div>
-
+<!-- Success/Error Messages -->
 @if(session('success'))
     <div class="alert alert-success alert-dismissible fade show" role="alert">
         {{ session('success') }}
@@ -109,37 +195,49 @@
                                         <div class="d-flex justify-content-between align-items-center w-100 me-3">
                                             <div class="d-flex align-items-center">
                                                 <strong>{{ $reviewType->name }}</strong>
+                                                @if($reviewType->isMaster)
+                                                    <span class="badge bg-success ms-2">{{ $reviewType->locationName }}</span>
+                                                    <span class="badge bg-primary ms-2">Master</span>
+                                                @else
+                                                    <span class="badge bg-info ms-2">{{ $reviewType->locationName }}</span>
+                                                    <span class="badge bg-secondary ms-2">Duplicate #{{ $reviewType->duplicateNumber }}</span>
+                                                @endif
+                                                <span class="badge bg-primary ms-2">{{ $reviewType->auditTemplates->count() }} Templates</span>
                                                 
-                                                <!-- Location badges showing master and all duplicates -->
-                                                <div class="ms-3">
-                                                    <!-- Master badge -->
-                                                    <span class="badge bg-primary me-2">{{ $reviewType->locationName }}</span>
-                                                    
-                                                    <!-- Duplicate badges -->
-                                                    @foreach($reviewType->duplicates as $duplicate)
-                                                        <span class="badge bg-secondary me-2">{{ $duplicate->locationName }}</span>
-                                                    @endforeach
-                                                    
-                                                    <!-- Template count -->
-                                                    <span class="badge bg-info">{{ $reviewType->auditTemplates->count() }} Templates</span>
-                                                </div>
+                                                <!-- Rename Location Button -->
+                                                <button class="btn btn-outline-secondary btn-sm ms-2" type="button" onclick="renameLocation({{ $reviewType->attachmentId ?? 0 }}, '{{ $reviewType->locationName ?? '' }}')" title="Rename Location">
+                                                    <i class="mdi mdi-pencil"></i> Rename
+                                                </button>
                                                 
-                                                <!-- Facility management buttons -->
-                                                <div class="ms-3">
-                                                    <button class="btn btn-sm btn-success" onclick="duplicateReviewType({{ $reviewType->id }}, {{ $reviewType->attachmentId }})">
-                                                        <i class="fas fa-copy"></i> Duplicate
+                                                <!-- Remove Duplicate Button - Only for Duplicates -->
+                                                @if($reviewType->isDuplicate)
+                                                    <button class="btn btn-outline-danger btn-sm ms-2" type="button" onclick="removeDuplicate({{ $reviewType->attachmentId }}, '{{ $reviewType->locationName }}')" title="Remove This Duplicate">
+                                                        <i class="mdi mdi-delete"></i> Remove Duplicate
                                                     </button>
-                                                    <button class="btn btn-sm btn-warning" onclick="renameLocation({{ $reviewType->attachmentId }}, '{{ $reviewType->locationName }}')">
-                                                        <i class="fas fa-edit"></i> Rename
-                                                    </button>
-                                                    @if($reviewType->duplicates->count() > 0)
-                                                        <button class="btn btn-sm btn-danger" onclick="detachReviewType({{ $reviewType->id }}, {{ $reviewType->attachmentId }})">
-                                                            <i class="fas fa-unlink"></i> Detach All
+                                                @endif
+                                                
+                                                <!-- Sync Table Structure Button - Only for Masters -->
+                                                @if($reviewType->isMaster)
+                                                    <form method="POST" action="{{ route('admin.audits.sync-table-structures', ['audit' => $audit->id, 'reviewTypeId' => $reviewType->id]) }}" class="d-inline ms-2" onsubmit="return confirm('Are you sure you want to sync the table structures for this review type? This will overwrite audit-specific table questions with the default template structure.');">
+                                                        @csrf
+                                                        <button type="submit" class="btn btn-outline-info btn-sm" title="Sync Table Structure">
+                                                            <i class="mdi mdi-sync"></i> Sync Table Structure
                                                         </button>
-                                                    @endif
-                                                </div>
+                                                    </form>
+                                                @endif
+                                                
+                                                <!-- Duplicate Review Type Button - Only for Masters -->
+                                                @if($reviewType->isMaster)
+                                                    <button class="btn btn-outline-success btn-sm ms-2" type="button" onclick="duplicateReviewType({{ $reviewType->id }})" title="Create Duplicate for Another Location">
+                                                        <i class="mdi mdi-content-copy"></i> Duplicate for Location
+                                                    </button>
+                                                    
+                                                    <!-- Detach Review Type Button - Only for Masters -->
+                                                    <button class="btn btn-outline-danger btn-sm ms-2" type="button" onclick="detachReviewType({{ $reviewType->id }})" title="Detach Review Type (removes all instances)">
+                                                        <i class="mdi mdi-close"></i> Detach
+                                                    </button>
+                                                @endif
                                             </div>
-                                            
                                             <div>
                                                 <span class="badge bg-info">{{ $reviewType->auditTemplates->sum(fn($template) => $template->sections->count()) }} Sections</span>
                                                 <span class="badge bg-success">{{ $reviewType->auditTemplates->sum(fn($template) => $template->sections->sum(fn($section) => $section->questions->count())) }} Questions</span>
@@ -149,21 +247,27 @@
                                 </h2>
                                 <div id="collapse{{ $index }}" class="accordion-collapse collapse {{ $index == 0 ? 'show' : '' }}" aria-labelledby="heading{{ $index }}" data-bs-parent="#reviewTypesAccordion">
                                     <div class="accordion-body">
-                                        <!-- Location selector -->
+                                        @php
+                                            // Define selected attachment ID for this review type (used throughout this accordion body)
+                                            $selectedAttachmentId = request('selected_attachment_' . $reviewType->id, $reviewType->attachmentId);
+                                        @endphp
+                                        
+                                        <!-- Location selector for grouped view -->
+                                        @if($reviewType->isMaster && isset($reviewType->duplicates) && $reviewType->duplicates->count() > 0)
                                         <div class="mb-3">
                                             <label for="locationSelector{{ $reviewType->id }}" class="form-label fw-bold">
-                                                <i class="fas fa-map-marker-alt"></i> Select Location:
+                                                <i class="mdi mdi-map-marker"></i> Select Location:
                                             </label>
                                             <select class="form-select" id="locationSelector{{ $reviewType->id }}" 
                                                     onchange="switchLocation({{ $reviewType->id }}, this.value)">
                                                 <!-- Master option -->
-                                                <option value="{{ $reviewType->attachmentId }}" selected>
+                                                <option value="{{ $reviewType->attachmentId }}" {{ $selectedAttachmentId == $reviewType->attachmentId ? 'selected' : '' }}>
                                                     {{ $reviewType->locationName }} (Master)
                                                 </option>
                                                 
                                                 <!-- Duplicate options -->
                                                 @foreach($reviewType->duplicates as $duplicate)
-                                                    <option value="{{ $duplicate->attachmentId }}">
+                                                    <option value="{{ $duplicate->attachmentId }}" {{ $selectedAttachmentId == $duplicate->attachmentId ? 'selected' : '' }}>
                                                         {{ $duplicate->locationName }} (Duplicate #{{ $duplicate->duplicateNumber }})
                                                     </option>
                                                 @endforeach
@@ -172,41 +276,249 @@
                                         
                                         <!-- Location-specific action buttons -->
                                         <div class="mb-3" id="locationActions{{ $reviewType->id }}">
-                                            <!-- Master location actions (shown by default) -->
-                                            <div class="location-actions" data-attachment-id="{{ $reviewType->attachmentId }}">
+                                            <!-- Master location actions -->
+                                            <div class="location-actions {{ $selectedAttachmentId == $reviewType->attachmentId ? '' : 'd-none' }}" data-attachment-id="{{ $reviewType->attachmentId }}">
                                                 <button class="btn btn-sm btn-warning me-2" 
                                                         onclick="renameLocation({{ $reviewType->attachmentId }}, '{{ $reviewType->locationName }}')">
-                                                    <i class="fas fa-edit"></i> Rename Master
-                                                </button>
-                                                <button class="btn btn-sm btn-success me-2" 
-                                                        onclick="addQuestion({{ $reviewType->id }}, {{ $reviewType->attachmentId }})">
-                                                    <i class="fas fa-plus"></i> Add Question
+                                                    <i class="mdi mdi-pencil"></i> Rename Master
                                                 </button>
                                             </div>
                                             
-                                            <!-- Duplicate location actions (hidden by default) -->
+                                            <!-- Duplicate location actions -->
                                             @foreach($reviewType->duplicates as $duplicate)
-                                                <div class="location-actions d-none" data-attachment-id="{{ $duplicate->attachmentId }}">
+                                                <div class="location-actions {{ $selectedAttachmentId == $duplicate->attachmentId ? '' : 'd-none' }}" data-attachment-id="{{ $duplicate->attachmentId }}">
                                                     <button class="btn btn-sm btn-warning me-2" 
                                                             onclick="renameLocation({{ $duplicate->attachmentId }}, '{{ $duplicate->locationName }}')">
-                                                        <i class="fas fa-edit"></i> Rename Duplicate
+                                                        <i class="mdi mdi-pencil"></i> Rename Duplicate
                                                     </button>
                                                     <button class="btn btn-sm btn-danger" 
                                                             onclick="removeDuplicate({{ $duplicate->attachmentId }}, '{{ $duplicate->locationName }}')">
-                                                        <i class="fas fa-trash"></i> Remove Duplicate
+                                                        <i class="mdi mdi-delete"></i> Remove Duplicate
                                                     </button>
                                                 </div>
                                             @endforeach
                                         </div>
+                                        @endif
+                                    
+                                    @php
+                                        $templateCount = $reviewType->auditTemplates->count();
+                                    @endphp
+                                    @if($templateCount > 0)
+                                        {{-- Render all templates, only one visible at a time --}}
+                                        @foreach($reviewType->auditTemplates as $templateIndex => $template)
+                                            <div class="template-panel" id="template-panel-{{ $reviewType->id }}-{{ $templateIndex }}" style="display: {{ (int)old('active_template_index', request('active_template_index', 0)) == $templateIndex ? 'block' : ($templateIndex == 0 ? 'block' : 'none') }};">
+                                                <div class="card mb-4" id="template-{{ $template->id }}">
+                                                    <div class="card-header bg-light">
+                                                        <div class="d-flex justify-content-between align-items-center">
+                                                            <h6 class="mb-0">
+                                                                <i class="mdi mdi-file-document-outline me-2"></i>
+                                                                {{ $template->name }}
+                                                            </h6>
+                                                            <div>
+                                                                <button class="btn btn-outline-primary btn-sm me-2" type="button" onclick="previewTemplate({{ $template->id }})">
+                                                                    <i class="mdi mdi-eye"></i> Preview
+                                                                </button>
+                                                                <button class="btn btn-outline-success btn-sm" type="button" onclick="duplicateTemplate({{ $template->id }})">
+                                                                    <i class="mdi mdi-content-copy"></i> Duplicate
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="card-body">
+                                                        @foreach($template->sections as $section)
+                                                            <div class="card mb-3 section-card" id="section-{{ $section->id }}">
+                                                                <div class="card-header bg-light">
+                                                                    <div class="d-flex justify-content-between align-items-center">
+                                                                        <h6 class="mb-0">
+                                                                            <i class="mdi mdi-folder-outline me-2"></i>
+                                                                            {{ $section->name }}
+                                                                        </h6>
+                                                                        @if($reviewType->isMaster)
+                                                                        <div class="btn-group btn-group-sm">
+                                                                            <button class="btn btn-outline-success" type="button" onclick="addQuestion({{ $section->id }})">
+                                                                                <i class="mdi mdi-plus"></i> Add Question
+                                                                            </button>
+                                                                            <button class="btn btn-outline-warning" type="button" onclick="editSection({{ $section->id }})">
+                                                                                <i class="mdi mdi-pencil"></i>
+                                                                            </button>
+                                                                            <button class="btn btn-outline-danger" type="button" onclick="deleteSection({{ $section->id }})">
+                                                                                <i class="mdi mdi-delete"></i>
+                                                                            </button>
+                                                                        </div>
+                                                                        @else
+                                                                        <div class="text-muted small">
+                                                                            <i class="mdi mdi-information me-1"></i>Structure managed by master
+                                                                        </div>
+                                                                        @endif
+                                                                    </div>
+                                                                    @if($section->description)
+                                                                        <small class="text-muted">{{ $section->description }}</small>
+                                                                    @endif
+                                                                </div>
+                                                                <div class="card-body">
+                                                                    @foreach($section->questions as $questionIndex => $question)
+                                            
+                                                                        <form method="POST" action="{{ route('admin.review-types-crud.save-responses', $reviewType->id) }}" class="mb-4 template-response-form">
+                                                                            @csrf
+                                                                            <input type="hidden" name="audit_id" value="{{ $audit->id }}">
+                                                                            <input type="hidden" name="attachment_id" value="{{ $selectedAttachmentId }}">
+                                                                            <input type="hidden" name="redirect_to" value="{{ url()->current() }}">
+                                                                            <input type="hidden" name="active_template_index" class="active-template-index-input" value="{{ old('active_template_index', request('active_template_index', 0)) }}">
+                                                                            @php
+                                                                                $existingResponse = $question->responses()
+                                                                                    ->where('audit_id', $audit->id)
+                                                                                    ->where('attachment_id', $selectedAttachmentId)
+                                                                                    ->where('created_by', auth()->id())
+                                                                                    ->first();
+                                                                            @endphp
 
-                                        <!-- Template sections container -->
-                                        <div id="sectionsContainer{{ $reviewType->id }}">
-                                            @include('admin.audit-management.audits.partials.sections', [
-                                                'reviewType' => $reviewType,
-                                                'audit' => $audit
-                                            ])
+                                                                            <div class="question-item p-3 border rounded" id="question-{{ $question->id }}">
+                                                                                <div class="d-flex justify-content-between align-items-start">
+                                                                                    <div class="flex-grow-1">
+                                                                                        <h6 class="text-primary">{{ $questionIndex + 1 }}. {{ $question->question_text }}</h6>
+                                                                                        @if($question->description)
+                                                                                            <p class="text-muted small mb-2">{{ $question->description }}</p>
+                                                                                        @endif
+
+                                                                                        @if($question->response_type === 'table')
+                                                                                            <div class="mb-2">
+                                                                                                <button type="button" class="btn btn-outline-info btn-sm" data-bs-toggle="modal" data-bs-target="#tableModal-{{ $question->id }}">
+                                                                                                    <i class="mdi mdi-table"></i> View Table
+                                                                                                </button>
+                                                                                                {{-- Table preview removed: user will only see the table in the modal when clicking View Table --}}
+                                                                                            </div>
+                                                                                        @else
+                                                                                            <div class="mb-2">
+                                                                                                <label class="form-label">Answer</label>
+                                                                                                @switch($question->response_type)
+                                                                                                    @case('text')
+                                                                                                        <input type="text" name="answers[{{ $question->id }}][answer]" class="form-control" value="{{ old('answers.' . $question->id . '.answer', $existingResponse->answer ?? '') }}">
+                                                                                                        @break
+                                                                                                    
+                                                                                                    @case('textarea')
+                                                                                                        <textarea name="answers[{{ $question->id }}][answer]" class="form-control" rows="3">{{ old('answers.' . $question->id . '.answer', $existingResponse->answer ?? '') }}</textarea>
+                                                                                                        @break
+                                                                                                    
+                                                                                                    @case('number')
+                                                                                                        <input type="number" name="answers[{{ $question->id }}][answer]" class="form-control" value="{{ old('answers.' . $question->id . '.answer', $existingResponse->answer ?? '') }}">
+                                                                                                        @break
+                                                                                                    
+                                                                                                    @case('date')
+                                                                                                        <input type="date" name="answers[{{ $question->id }}][answer]" class="form-control" value="{{ old('answers.' . $question->id . '.answer', $existingResponse->answer ?? '') }}">
+                                                                                                        @break
+                                                                                                    
+                                                                                                    @case('yes_no')
+                                                                                                        <select name="answers[{{ $question->id }}][answer]" class="form-select">
+                                                                                                            <option value="">-- Select --</option>
+                                                                                                            @if($question->options && is_array($question->options) && count($question->options) >= 2)
+                                                                                                                <option value="{{ $question->options[0] }}" {{ old('answers.' . $question->id . '.answer', $existingResponse->answer ?? '') == $question->options[0] ? 'selected' : '' }}>{{ $question->options[0] }}</option>
+                                                                                                                <option value="{{ $question->options[1] }}" {{ old('answers.' . $question->id . '.answer', $existingResponse->answer ?? '') == $question->options[1] ? 'selected' : '' }}>{{ $question->options[1] }}</option>
+                                                                                                            @else
+                                                                                                                <option value="Yes" {{ old('answers.' . $question->id . '.answer', $existingResponse->answer ?? '') == 'Yes' ? 'selected' : '' }}>Yes</option>
+                                                                                                                <option value="No" {{ old('answers.' . $question->id . '.answer', $existingResponse->answer ?? '') == 'No' ? 'selected' : '' }}>No</option>
+                                                                                                            @endif
+                                                                                                        </select>
+                                                                                                        @break
+                                                                                                    
+                                                                                                    @case('select')
+                                                                                                        @if($question->options && is_array($question->options) && count($question->options) > 0)
+                                                                                                            <select name="answers[{{ $question->id }}][answer]" class="form-select">
+                                                                                                                <option value="">-- Select --</option>
+                                                                                                                @foreach($question->options as $option)
+                                                                                                                    <option value="{{ $option }}" {{ old('answers.' . $question->id . '.answer', $existingResponse->answer ?? '') == $option ? 'selected' : '' }}>{{ $option }}</option>
+                                                                                                                @endforeach
+                                                                                                            </select>
+                                                                                                        @else
+                                                                                                            <input type="text" name="answers[{{ $question->id }}][answer]" class="form-control" value="{{ old('answers.' . $question->id . '.answer', $existingResponse->answer ?? '') }}" placeholder="No options defined">
+                                                                                                        @endif
+                                                                                                        @break
+                                                                                                    
+                                                                                                    @default
+                                                                                                        <input type="text" name="answers[{{ $question->id }}][answer]" class="form-control" value="{{ old('answers.' . $question->id . '.answer', $existingResponse->answer ?? '') }}">
+                                                                                                @endswitch
+                                                                                            </div>
+                                                                                        @endif
+
+                                                                                        <div class="mb-2">
+                                                                                            <label class="form-label">Audit Note</label>
+                                                                                            <textarea name="answers[{{ $question->id }}][audit_note]" class="form-control" rows="2">{{ old('answers.' . $question->id . '.audit_note', $existingResponse->audit_note ?? '') }}</textarea>
+                                                                                        </div>
+
+                                                                                        <div class="row mt-2">
+                                                                                            <div class="col-md-6">
+                                                                                                <span class="badge bg-secondary">{{ ucfirst($question->response_type) }}</span>
+                                                                                                @if($question->is_required)
+                                                                                                    <span class="badge bg-warning">Required</span>
+                                                                                                @endif
+                                                                                            </div>
+                                                                                            <div class="col-md-6 text-end">
+                                                                                                <small class="text-muted">Order: {{ $question->order }}</small>
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    @if($reviewType->isMaster)
+                                                                                    <div class="btn-group btn-group-sm">
+                                                                                        <button class="btn btn-outline-warning" type="button" onclick="editQuestion({{ $question->id }})">
+                                                                                            <i class="mdi mdi-pencil"></i>
+                                                                                        </button>
+                                                                                        <button class="btn btn-outline-danger" type="button" onclick="deleteQuestion({{ $question->id }})">
+                                                                                            <i class="mdi mdi-delete"></i>
+                                                                                        </button>
+                                                                                    </div>
+                                                                                    @endif
+                                                                                </div>
+                                                                                <div class="text-end mt-3">
+                                                                                    <button type="submit" class="btn btn-primary">
+                                                                                        <i class="mdi mdi-content-save"></i> Save
+                                                                                    </button>
+                                                                                </div>
+                                                                            </div>
+                                                                        </form>
+                                                                    @endforeach
+                                                                </div>
+                                                            </div>
+                                                        @endforeach
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        @endforeach
+
+                                        @if($templateCount > 1)
+                                            <div class="d-flex justify-content-between align-items-center mt-3">
+                                                <button class="btn btn-outline-secondary"
+                                                    type="button"
+                                                    id="prev-template-btn-{{ $reviewType->id }}"
+                                                    onclick="showPrevTemplate({{ $reviewType->id }}, {{ $templateCount }})">
+                                                    &laquo; Previous Template
+                                                </button>
+                                                <button class="btn btn-outline-secondary"
+                                                    type="button"
+                                                    id="next-template-btn-{{ $reviewType->id }}"
+                                                    onclick="showNextTemplate({{ $reviewType->id }}, {{ $templateCount }})">
+                                                    Next Template &raquo;
+                                                </button>
+                                            </div>
+                                        @endif
+
+                                    @endif
+
+                                    <div class="row mt-4">
+                                        <div class="col-12">
+                                            <div class="card border-danger">
+                                                <div class="card-header bg-danger text-white">
+                                                    <h6 class="mb-0">Danger Zone</h6>
+                                                </div>
+                                                <div class="card-body">
+                                                    <button class="btn btn-outline-danger" onclick="removeReviewType({{ $reviewType->id }})">
+                                                        <i class="mdi mdi-delete"></i> Remove Review Type
+                                                    </button>
+                                                    <small class="text-muted d-block mt-2">This will remove the review type and all its templates, sections, and questions from this audit.</small>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
+                                    {{-- End Danger zone --}}
+                                    @endphp
                                 </div>
                             </div>
                         @endforeach
@@ -224,51 +536,273 @@
         </div>
     </div>
 </div>
-</div>
+
+{{-- Render all table modals for all table questions at the END of the page, outside all forms/cards --}}
+@php
+$tableQuestions = [];
+foreach($attachedReviewTypes as $reviewType) {
+    foreach($reviewType->auditTemplates as $template) {
+        foreach($template->sections as $section) {
+            foreach($section->questions as $question) {
+                if($question->response_type === 'table') {
+                    $tableQuestions[] = [$question, $reviewType];
+                }
+            }
+        }
+    }
+}
+@endphp
+
+@foreach($tableQuestions as [$modalQuestion, $modalReviewType])
+    @php
+        $options = is_string($modalQuestion->options) ? json_decode($modalQuestion->options, true) : $modalQuestion->options;
+        $rows = $options['rows'] ?? [];
+        // Use selected attachment ID for table modals too
+        $selectedAttachmentId = request('selected_attachment_' . $modalReviewType->id, $modalReviewType->attachmentId);
+        $existingResponse = $modalQuestion->responses()
+            ->where('audit_id', $audit->id)
+            ->where('attachment_id', $selectedAttachmentId)
+            ->where('created_by', auth()->id())
+            ->first();
+        // Always show the audit-specific saved table (including headers) if available, otherwise fall back to default
+        $tableToShow = [];
+        if ($existingResponse && $existingResponse->answer) {
+            $tableToShow = is_array($existingResponse->answer) ? $existingResponse->answer : json_decode($existingResponse->answer, true);
+        } else {
+            $tableToShow = $rows;
+        }
+        $colCount = 2;
+        if (is_array($tableToShow) && count($tableToShow) && is_array(reset($tableToShow)) && count(reset($tableToShow)) > $colCount) {
+            $colCount = count(reset($tableToShow));
+        }
+    @endphp
+    <div class="modal fade" id="tableModal-{{ $modalQuestion->id }}" tabindex="-1" aria-labelledby="tableModalLabel-{{ $modalQuestion->id }}" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="tableModalLabel-{{ $modalQuestion->id }}">
+                        Table Answer: {{ $modalQuestion->question_text }}
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form method="POST" action="{{ route('admin.review-types-crud.save-responses', $modalReviewType->id) }}">
+                        @csrf
+                        <input type="hidden" name="audit_id" value="{{ $audit->id }}">
+                        <input type="hidden" name="attachment_id" value="{{ $selectedAttachmentId }}">
+                        <input type="hidden" name="redirect_to" value="{{ url()->current() }}#tableModal-{{ $modalQuestion->id }}">
+                        <div class="mb-3">
+                            <label for="headerRows-{{ $modalQuestion->id }}" class="form-label fw-semibold">Number of Header Rows</label>
+                            <input type="number" min="1" max="{{ count($rows) }}" class="form-control form-control-sm header-rows-input" name="answers[{{ $modalQuestion->id }}][header_rows]" id="headerRows-{{ $modalQuestion->id }}" value="{{ $options['header_rows'] ?? 1 }}">
+                            <small class="text-muted">Set how many rows at the top are table headers.</small>
+                        </div>
+                        <div class="table-responsive" style="background-color: #ffffff;">
+                            <table class="table table-bordered table-hover table-editable" id="editableTable-{{ $modalQuestion->id }}" style="background-color: #ffffff !important;">
+                                <tbody>
+                                @php
+                                    // Use header_rows from saved response if available, else from options
+                                    $headerRows = $options['header_rows'] ?? 1;
+                                    if ($existingResponse && isset($existingResponse->answer)) {
+                                        $saved = is_array($existingResponse->answer) ? $existingResponse->answer : json_decode($existingResponse->answer, true);
+                                        if (isset($existingResponse->answer_header_rows)) {
+                                            $headerRows = $existingResponse->answer_header_rows;
+                                        } elseif (isset($options['header_rows'])) {
+                                            $headerRows = $options['header_rows'];
+                                        }
+                                    }
+                                @endphp
+                                @if(count($tableToShow))
+                                    @foreach($tableToShow as $r => $row)
+                                        <tr>
+                                            @foreach($row as $c => $cell)
+                                                @if($r < $headerRows)
+                                                    <th style="background-color: #f8f9fa; vertical-align: middle;">
+                                                        <input type="text"
+                                                            class="form-control form-control-sm fw-bold text-center border-0"
+                                                            style="background: transparent; box-shadow: none;"
+                                                            name="answers[{{ $modalQuestion->id }}][table][{{ $r }}][{{ $c }}]"
+                                                            value="{{ old('answers.' . $modalQuestion->id . '.table.' . $r . '.' . $c, $tableToShow[$r][$c] ?? '') }}"
+                                                            placeholder="Header {{ $c+1 }}">
+                                                    </th>
+                                                @else
+                                                    <td style="vertical-align: middle;">
+                                                        <input type="text"
+                                                            class="form-control form-control-sm border-0"
+                                                            style="background: transparent; box-shadow: none;"
+                                                            name="answers[{{ $modalQuestion->id }}][table][{{ $r }}][{{ $c }}]"
+                                                            value="{{ old('answers.' . $modalQuestion->id . '.table.' . $r . '.' . $c, $tableToShow[$r][$c] ?? '') }}">
+                                                    </td>
+                                                @endif
+                                            @endforeach
+                                            @if($r < $headerRows && count($row) < $colCount)
+                                                @for($i = count($row); $i < $colCount; $i++)
+                                                    <th style="background-color: #f8f9fa; vertical-align: middle;">
+                                                        <input type="text"
+                                                            class="form-control form-control-sm fw-bold text-center border-0"
+                                                            style="background: transparent; box-shadow: none;"
+                                                            name="answers[{{ $modalQuestion->id }}][table][{{ $r }}][{{ $i }}]"
+                                                            value="{{ old('answers.' . $modalQuestion->id . '.table.' . $r . '.' . $i, $tableToShow[$r][$i] ?? '') }}"
+                                                            placeholder="Header {{ $i+1 }}">
+                                                    </th>
+                                                @endfor
+                                            @elseif($r >= $headerRows && count($row) < $colCount)
+                                                @for($i = count($row); $i < $colCount; $i++)
+                                                    <td style="vertical-align: middle;">
+                                                        <input type="text" 
+                                                            class="form-control form-control-sm border-0"
+                                                            style="background: transparent; box-shadow: none;"
+                                                            name="answers[{{ $modalQuestion->id }}][table][{{ $r }}][{{ $i }}]"
+                                                            value="{{ old('answers.' . $modalQuestion->id . '.table.' . $r . '.' . $i, $tableToShow[$r][$i] ?? '') }}">
+                                                    </td>
+                                                @endfor
+                                            @endif
+                                        </tr>
+                                    @endforeach
+                                @else
+                                    <tr>
+                                        <th style="background-color: #f8f9fa; vertical-align: middle;">
+                                            <input type="text"
+                                                class="form-control form-control-sm fw-bold text-center border-0"
+                                                style="background: transparent; box-shadow: none;"
+                                                name="answers[{{ $modalQuestion->id }}][table][0][0]"
+                                                placeholder="Header 1">
+                                        </th>
+                                        <th style="background-color: #f8f9fa; vertical-align: middle;">
+                                            <input type="text"
+                                                class="form-control form-control-sm fw-bold text-center border-0"
+                                                style="background: transparent; box-shadow: none;"
+                                                name="answers[{{ $modalQuestion->id }}][table][0][1]"
+                                                placeholder="Header 2">
+                                        </th>
+                                    </tr>
+                                    <tr>
+                                        <td style="vertical-align: middle;">
+                                            <input type="text" 
+                                                class="form-control form-control-sm border-0"
+                                                style="background: transparent; box-shadow: none;"
+                                                name="answers[{{ $modalQuestion->id }}][table][1][0]">
+                                        </td>
+                                        <td style="vertical-align: middle;">
+                                            <input type="text" 
+                                                class="form-control form-control-sm border-0"
+                                                style="background: transparent; box-shadow: none;"
+                                                name="answers[{{ $modalQuestion->id }}][table][1][1]">
+                                        </td>
+                                    </tr>
+                                @endif
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="table-action-buttons">
+                            <div class="d-flex gap-2 flex-wrap justify-content-center">
+                                <button type="button" class="btn btn-outline-primary btn-sm"
+                                    onclick="addRow({{ $modalQuestion->id }})">
+                                    <i class="mdi mdi-plus"></i> Add Row
+                                </button>
+                                <button type="button" class="btn btn-outline-primary btn-sm"
+                                    onclick="addColumn({{ $modalQuestion->id }})">
+                                    <i class="mdi mdi-plus"></i> Add Column
+                                </button>
+                                <button type="button" class="btn btn-outline-danger btn-sm"
+                                    onclick="deleteRow({{ $modalQuestion->id }})">
+                                    <i class="mdi mdi-minus"></i> Delete Row
+                                </button>
+                                <button type="button" class="btn btn-outline-danger btn-sm"
+                                    onclick="deleteColumn({{ $modalQuestion->id }})">
+                                    <i class="mdi mdi-minus"></i> Delete Column
+                                </button>
+                            </div>
+                        </div>
+                        <div class="text-end mt-3">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="mdi mdi-content-save"></i> Save Table
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+@endforeach
 
 <!-- modals -->
 @include('admin.audit-management.audits.modals')
 
 <script>
-// Global variables for location switching
-window.currentLocations = @json($attachedReviewTypes->mapWithKeys(function($reviewType) {
-    return [$reviewType->id => $reviewType->attachmentId];
-}));
-
-// Function to switch location and load content via AJAX
-function switchLocation(reviewTypeId, attachmentId) {
-    // Update current location
-    window.currentLocations[reviewTypeId] = attachmentId;
-    
-    // Show/hide appropriate action buttons
-    const actionsContainer = document.getElementById(`locationActions${reviewTypeId}`);
-    const allActions = actionsContainer.querySelectorAll('.location-actions');
-    
-    allActions.forEach(action => {
-        if (action.dataset.attachmentId === attachmentId) {
-            action.classList.remove('d-none');
-        } else {
-            action.classList.add('d-none');
-        }
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize Bootstrap modals
+    var modals = document.querySelectorAll('.modal');
+    modals.forEach(function(modal) {
+        new bootstrap.Modal(modal);
     });
     
-    // For now, reload the page to show the selected location
-    // This can be improved later with proper AJAX
-    const currentUrl = new URL(window.location);
-    currentUrl.searchParams.set('selected_attachment', attachmentId);
-    window.location.href = currentUrl.toString();
-}
-
-// Function to load sections content via AJAX
-function loadSectionsContent(reviewTypeId, attachmentId) {
-    console.log(`Direct content already loaded for reviewType: ${reviewTypeId}, attachment: ${attachmentId}`);
-    // Content is already included directly, no need for AJAX loading
-}
-
-// Initialize page - load master sections for each review type
-document.addEventListener('DOMContentLoaded', function() {
-    // Content is already loaded directly via include, no need for AJAX
-    console.log('Dashboard loaded with direct content');
+    // Global variables for location switching
+    window.currentLocations = @json($attachedReviewTypes->mapWithKeys(function($reviewType) {
+        return [$reviewType->id => $reviewType->attachmentId];
+    }));
+    
+    // Function to switch location and reload responses
+    window.switchLocation = function(reviewTypeId, attachmentId) {
+        // Update current location
+        window.currentLocations[reviewTypeId] = attachmentId;
+        
+        // Show/hide appropriate action buttons
+        const actionsContainer = document.getElementById(`locationActions${reviewTypeId}`);
+        if (actionsContainer) {
+            const allActions = actionsContainer.querySelectorAll('.location-actions');
+            
+            allActions.forEach(action => {
+                if (action.dataset.attachmentId === attachmentId) {
+                    action.classList.remove('d-none');
+                } else {
+                    action.classList.add('d-none');
+                }
+            });
+        }
+        
+        // Reload the page with the selected location to show correct responses
+        const url = new URL(window.location);
+        url.searchParams.set('selected_attachment_' + reviewTypeId, attachmentId);
+        window.location.href = url.toString();
+    };
+    
+    window.showPrevTemplate = function(reviewTypeId, templateCount) {
+        let current = getActiveTemplateIndex(reviewTypeId, templateCount);
+        let prev = (current - 1 + templateCount) % templateCount;
+        setActiveTemplate(reviewTypeId, prev, templateCount);
+    };
+    window.showNextTemplate = function(reviewTypeId, templateCount) {
+        let current = getActiveTemplateIndex(reviewTypeId, templateCount);
+        let next = (current + 1) % templateCount;
+        setActiveTemplate(reviewTypeId, next, templateCount);
+    };
+    function getActiveTemplateIndex(reviewTypeId, templateCount) {
+        let panels = document.querySelectorAll(`[id^='template-panel-${reviewTypeId}-']`);
+        for (let i = 0; i < panels.length; i++) {
+            if (panels[i].style.display !== 'none') return i;
+        }
+        return 0;
+    }
+    function setActiveTemplate(reviewTypeId, index, templateCount) {
+        for (let i = 0; i < templateCount; i++) {
+            let panel = document.getElementById(`template-panel-${reviewTypeId}-${i}`);
+            if (panel) panel.style.display = (i === index) ? 'block' : 'none';
+        }
+        let forms = document.querySelectorAll(`#collapse${reviewTypeId} form.template-response-form`);
+        forms.forEach(form => {
+            let input = form.querySelector('input.active-template-index-input');
+            if (input) input.value = index;
+        });
+    }
+    document.querySelectorAll('.template-response-form').forEach(form => {
+        let input = form.querySelector('input.active-template-index-input');
+        if (input) {
+            let reviewTypeId = form.closest('.accordion-collapse').id.replace('collapse', '');
+            let index = parseInt(input.value || '0', 10);
+            let templateCount = document.querySelectorAll(`[id^='template-panel-${reviewTypeId}-']`).length;
+            setActiveTemplate(reviewTypeId, index, templateCount);
+        }
+    });
 });
 </script>
 

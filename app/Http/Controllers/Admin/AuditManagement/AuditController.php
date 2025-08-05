@@ -31,7 +31,16 @@ class AuditController extends Controller
      */
     public function index()
     {
-        $audits = Audit::with('country')->paginate(10);
+        $user = auth()->user();
+        
+        // If user is an auditor, show only assigned audits
+        if ($user->hasRole('Auditor')) {
+            $audits = $user->assignedAudits()->with('country')->paginate(10);
+        } else {
+            // Superadmin can see all audits
+            $audits = Audit::with('country')->paginate(10);
+        }
+        
         return view('admin.audit-management.audits.index', compact('audits'));
     }
 
@@ -89,6 +98,16 @@ class AuditController extends Controller
      */
     public function show(Audit $audit)
     {
+        $user = auth()->user();
+        
+        // If user is an auditor, check if they have access to this audit
+        if ($user->hasRole('Auditor')) {
+            $hasAccess = $user->assignedAudits()->where('audits.id', $audit->id)->exists();
+            if (!$hasAccess) {
+                abort(403, 'You do not have access to this audit.');
+            }
+        }
+        
         $audit->load('country');
         return view('admin.audit-management.audits.show', compact('audit'));
     }
@@ -98,6 +117,16 @@ class AuditController extends Controller
      */
     public function dashboard(Audit $audit)
     {
+        $user = auth()->user();
+        
+        // If user is an auditor, check if they have access to this audit
+        if ($user->hasRole('Auditor')) {
+            $hasAccess = $user->assignedAudits()->where('audits.id', $audit->id)->exists();
+            if (!$hasAccess) {
+                abort(403, 'You do not have access to this audit.');
+            }
+        }
+        
         $audit->load([
             'country',
             'responses'
@@ -178,7 +207,7 @@ class AuditController extends Controller
             $attachedReviewTypes->push($reviewType);
         }
 
-        return view('admin.audit-management.audits.dashboard-original', compact('audit', 'availableReviewTypes', 'existingResponses', 'attachedReviewTypes'));
+        return view('admin.audit-management.audits.dashboard', compact('audit', 'availableReviewTypes', 'existingResponses', 'attachedReviewTypes'));
     }
 
     /**

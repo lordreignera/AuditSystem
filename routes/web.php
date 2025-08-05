@@ -48,6 +48,36 @@ Route::get('/debug-auth-status', function () {
     $html .= '<hr>';
     $html .= '<h3>Quick Links:</h3>';
     $html .= '<ul>';
+
+// Debug route for auditor
+Route::get('/debug-auditor', function() {
+    $user = auth()->user();
+    
+    if (!$user) {
+        return 'Not authenticated';
+    }
+    
+    $html = '<h2>Auditor Debug Info</h2>';
+    $html .= '<p><strong>User:</strong> ' . $user->name . ' (' . $user->email . ')</p>';
+    $html .= '<p><strong>User ID:</strong> ' . $user->id . '</p>';
+    $html .= '<p><strong>Roles:</strong> ' . $user->roles->pluck('name')->join(', ') . '</p>';
+    $html .= '<p><strong>Has Auditor role:</strong> ' . ($user->hasRole('Auditor') ? 'YES' : 'NO') . '</p>';
+    $html .= '<p><strong>Can view audits:</strong> ' . ($user->can('view audits') ? 'YES' : 'NO') . '</p>';
+    $html .= '<p><strong>Assigned audits count:</strong> ' . $user->assignedAudits()->count() . '</p>';
+    
+    if ($user->assignedAudits()->count() > 0) {
+        $html .= '<h3>Assigned Audits:</h3><ul>';
+        foreach ($user->assignedAudits as $audit) {
+            $html .= '<li>' . $audit->name . ' (ID: ' . $audit->id . ')</li>';
+        }
+        $html .= '</ul>';
+    }
+    
+    $html .= '<hr>';
+    $html .= '<p><a href="' . route('admin.audits.index') . '">Try Admin Audits Index</a></p>';
+    
+    return $html;
+})->middleware(['auth']);
     $html .= '<li><a href="' . route('login') . '">Login</a></li>';
     if (auth()->check()) {
         $html .= '<li><a href="/admin/users">Admin Users</a></li>';
@@ -106,19 +136,26 @@ Route::middleware([
         $completedAudits = \App\Models\Audit::where('end_date', '<=', now())->count();
         $totalUsers = \App\Models\User::count();
 
-        // For auditors (using belongsToMany)
+        // For auditors (using assignedAudits relationship)
         $myAssignedAudits = $user->hasRole('Auditor')
-            ? $user->audits()->count()
+            ? $user->assignedAudits()->count()
             : 0;
         $myCompletedAudits = $user->hasRole('Auditor')
-            ? $user->audits()->where('end_date', '<=', now())->count()
+            ? $user->assignedAudits()->where('end_date', '<=', now())->count()
             : 0;
 
-        // Recent audits for the table
-        $recentAudits = \App\Models\Audit::with('country')
-            ->orderByDesc('created_at')
-            ->take(5)
-            ->get();
+        // Recent audits for the table - filter for auditors to show only assigned audits
+        if ($user->hasRole('Auditor')) {
+            $recentAudits = $user->assignedAudits()->with('country')
+                ->orderByDesc('created_at')
+                ->take(5)
+                ->get();
+        } else {
+            $recentAudits = \App\Models\Audit::with('country')
+                ->orderByDesc('created_at')
+                ->take(5)
+                ->get();
+        }
 
         return view('admin.dashboard', compact(
             'totalAudits', 'activeAudits', 'completedAudits', 'totalUsers',

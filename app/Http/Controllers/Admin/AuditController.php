@@ -29,7 +29,16 @@ class AuditController extends Controller
      */
     public function index()
     {
-        $audits = Audit::with('country')->paginate(10);
+        $user = auth()->user();
+        
+        // If user is an auditor, show only assigned audits
+        if ($user->hasRole('Auditor')) {
+            $audits = $user->assignedAudits()->with('country')->paginate(10);
+        } else {
+            // For other roles, show all audits
+            $audits = Audit::with('country')->paginate(10);
+        }
+        
         return view('admin.audit-management.audits.index', compact('audits'));
     }
 

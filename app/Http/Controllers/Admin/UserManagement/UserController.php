@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin\UserManagement;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Models\Audit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Spatie\Permission\Models\Role;
@@ -31,7 +32,10 @@ class UserController extends Controller
     public function create()
     {
         $roles = Role::all();
-        return view('admin.user-management.users.create', compact('roles'));
+        $audits = Audit::select('id', 'name', 'description', 'start_date', 'end_date')
+                      ->orderBy('start_date', 'desc')
+                      ->get();
+        return view('admin.user-management.users.create', compact('roles', 'audits'));
     }
 
     /**
@@ -45,6 +49,8 @@ class UserController extends Controller
             'password' => 'required|string|min:8|confirmed',
             'roles' => 'array',
             'roles.*' => 'exists:roles,name',
+            'audits' => 'array',
+            'audits.*' => 'exists:audits,id',
             'profile_photo' => 'nullable|image|max:2048',
         ]);
 
@@ -65,8 +71,23 @@ class UserController extends Controller
             $user->assignRole($request->roles);
         }
 
+        // Assign audits if user has Auditor role and audits are selected
+        if ($request->has('audits') && in_array('Auditor', $request->roles ?? [])) {
+            foreach ($request->audits as $auditId) {
+                $user->assignedAudits()->attach($auditId, [
+                    'assigned_by' => auth()->id(),
+                    'assigned_at' => now(),
+                ]);
+            }
+        }
+
+        $message = 'User created successfully and assigned roles.';
+        if ($request->has('audits') && count($request->audits) > 0) {
+            $message .= ' Audit assignments completed.';
+        }
+
         return redirect()->route('admin.users.index')
-            ->with('success', 'User created successfully and assigned roles.');
+            ->with('success', $message);
     }
 
     /**
@@ -84,8 +105,12 @@ class UserController extends Controller
     public function edit(User $user)
     {
         $roles = Role::all();
+        $audits = Audit::select('id', 'name', 'description', 'start_date', 'end_date')
+                      ->orderBy('start_date', 'desc')
+                      ->get();
         $userRoles = $user->roles->pluck('name')->toArray();
-        return view('admin.user-management.users.edit', compact('user', 'roles', 'userRoles'));
+        $userAudits = $user->assignedAudits->pluck('id')->toArray();
+        return view('admin.user-management.users.edit', compact('user', 'roles', 'audits', 'userRoles', 'userAudits'));
     }
 
     /**
@@ -99,6 +124,8 @@ class UserController extends Controller
             'password' => 'nullable|string|min:8|confirmed',
             'roles' => 'array',
             'roles.*' => 'exists:roles,name',
+            'audits' => 'array',
+            'audits.*' => 'exists:audits,id',
             'profile_photo' => 'nullable|image|max:2048',
         ]);
 
@@ -119,6 +146,21 @@ class UserController extends Controller
 
         // Sync roles
         $user->syncRoles($request->roles ?? []);
+
+        // Sync audit assignments if user has Auditor role
+        if (in_array('Auditor', $request->roles ?? [])) {
+            $auditData = [];
+            foreach ($request->audits ?? [] as $auditId) {
+                $auditData[$auditId] = [
+                    'assigned_by' => auth()->id(),
+                    'assigned_at' => now(),
+                ];
+            }
+            $user->assignedAudits()->sync($auditData);
+        } else {
+            // Remove all audit assignments if not an auditor
+            $user->assignedAudits()->detach();
+        }
 
         return redirect()->route('admin.users.index')
             ->with('success', 'User updated successfully.');

@@ -69,4 +69,22 @@ class User extends Authenticatable
     {
         return $this->hasMany(\App\Models\Audit::class);
     }
+
+    /**
+     * Get audits assigned to this user
+     */
+    public function assignedAudits()
+    {
+        return $this->belongsToMany(Audit::class, 'user_audit_assignments')
+                    ->withPivot('assigned_by', 'assigned_at')
+                    ->withTimestamps();
+    }
+
+    /**
+     * Get audit assignments for this user
+     */
+    public function auditAssignments()
+    {
+        return $this->hasMany(UserAuditAssignment::class);
+    }
 }

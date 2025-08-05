@@ -82,7 +82,7 @@
                             @foreach($roles as $role)
                                 <div class="col-md-6 mb-2">
                                     <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" 
+                                        <input class="form-check-input role-checkbox" type="checkbox" 
                                                value="{{ $role->name }}" id="role_{{ $role->id }}" 
                                                name="roles[]" {{ in_array($role->name, old('roles', [])) ? 'checked' : '' }}>
                                         <label class="form-check-label" for="role_{{ $role->id }}">
@@ -96,6 +96,52 @@
                             @endforeach
                         </div>
                         @error('roles')
+                            <div class="text-danger">{{ $message }}</div>
+                        @enderror
+                    </div>
+                    
+                    <!-- Audit Assignment Section (shown only when Auditor role is selected) -->
+                    <div class="mb-3" id="audit-assignment-section" style="display: none;">
+                        <label class="form-label">Assign Audits <small class="text-muted">(Available for Auditor role)</small></label>
+                        <div class="alert alert-info">
+                            <i class="mdi mdi-information"></i> Select which audits this auditor should have access to. They will only see assigned audits in their dashboard.
+                        </div>
+                        
+                        @if(isset($audits) && $audits->count() > 0)
+                            <div class="row">
+                                @foreach($audits as $audit)
+                                    <div class="col-md-12 mb-3">
+                                        <div class="card">
+                                            <div class="card-body p-3">
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" 
+                                                           value="{{ $audit->id }}" id="audit_{{ $audit->id }}" 
+                                                           name="audits[]" {{ in_array($audit->id, old('audits', [])) ? 'checked' : '' }}>
+                                                    <label class="form-check-label w-100" for="audit_{{ $audit->id }}">
+                                                        <div class="d-flex justify-content-between align-items-start">
+                                                            <div>
+                                                                <strong>{{ $audit->name }}</strong>
+                                                                <br><small class="text-muted">{{ Str::limit($audit->description, 80) }}</small>
+                                                            </div>
+                                                            <div class="text-end">
+                                                                <small class="badge bg-primary">{{ \Carbon\Carbon::parse($audit->start_date)->format('M d, Y') }}</small>
+                                                                <br><small class="text-muted">to {{ \Carbon\Carbon::parse($audit->end_date)->format('M d, Y') }}</small>
+                                                            </div>
+                                                        </div>
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+                        @else
+                            <div class="alert alert-warning">
+                                <i class="mdi mdi-alert"></i> No audits available for assignment.
+                            </div>
+                        @endif
+                        
+                        @error('audits')
                             <div class="text-danger">{{ $message }}</div>
                         @enderror
                     </div>
@@ -141,4 +187,37 @@
         </div>
     </div>
 </div>
+
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const roleCheckboxes = document.querySelectorAll('.role-checkbox');
+    const auditSection = document.getElementById('audit-assignment-section');
+    const auditCheckboxes = document.querySelectorAll('input[name="audits[]"]');
+    
+    function toggleAuditSection() {
+        const auditorSelected = Array.from(roleCheckboxes).some(checkbox => 
+            checkbox.checked && checkbox.value === 'Auditor'
+        );
+        
+        if (auditorSelected) {
+            auditSection.style.display = 'block';
+        } else {
+            auditSection.style.display = 'none';
+            // Uncheck all audit checkboxes when hiding
+            auditCheckboxes.forEach(checkbox => checkbox.checked = false);
+        }
+    }
+    
+    // Check on page load (for form validation errors)
+    toggleAuditSection();
+    
+    // Add event listeners to role checkboxes
+    roleCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', toggleAuditSection);
+    });
+});
+</script>
+@endpush
+
 @endsection

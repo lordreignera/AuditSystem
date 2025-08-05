@@ -17,7 +17,7 @@
             </ul>
             <ul class="navbar-nav navbar-nav-right">
               <li class="nav-item dropdown d-none d-lg-block">
-                <a class="nav-link btn btn-success create-new-button" id="createbuttonDropdown" data-bs-toggle="dropdown" aria-expanded="false" href="#">+ ADD NEW</a>
+                <a class="nav-link btn btn-success create-new-button" id="createbuttonDropdown" data-toggle="dropdown" aria-expanded="false" href="#">+ ADD NEW</a>
                 <div class="dropdown-menu dropdown-menu-right navbar-dropdown preview-list" aria-labelledby="createbuttonDropdown">
                   <h6 class="p-3 mb-0"></h6>
                   <div class="dropdown-divider"></div>
@@ -63,7 +63,7 @@
                 </a>
               </li>
               <li class="nav-item dropdown border-left">
-                <a class="nav-link count-indicator dropdown-toggle" id="messageDropdown" href="#" data-bs-toggle="dropdown" aria-expanded="false">
+                <a class="nav-link count-indicator dropdown-toggle" id="messageDropdown" href="#" data-toggle="dropdown" aria-expanded="false">
                   <i class="mdi mdi-email"></i>
                   <span class="count bg-success"></span>
                 </a>
@@ -104,7 +104,7 @@
                 </div>
               </li>
               <li class="nav-item dropdown border-left">
-                <a class="nav-link count-indicator dropdown-toggle" id="notificationDropdown" href="#" data-bs-toggle="dropdown">
+                <a class="nav-link count-indicator dropdown-toggle" id="notificationDropdown" href="#" data-toggle="dropdown">
                   <i class="mdi mdi-bell"></i>
                   <span class="count bg-danger"></span>
                 </a>
@@ -150,15 +150,42 @@
                   <p class="p-3 mb-0 text-center">See all notifications</p>
                 </div>
               </li>
-              <li class="nav-item dropdown">
-                  <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                      <img src="{{ Auth::user()->profile_photo_url ?? asset('assets/images/faces/face4.jpg') }}" alt="Profile" class="rounded-circle profile-pic me-2" width="32" height="32">
-                      <span>{{ Auth::user()->name ?? '' }}</span>
+              <li class="nav-item dropdown" style="position: relative;">
+                  <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" id="userDropdown" role="button" aria-haspopup="true" aria-expanded="false" style="color: white !important; cursor: pointer;">
+                      <img src="{{ Auth::user()->profile_photo_url ?? asset('admin/assets/images/faces/face4.jpg') }}" alt="Profile" class="rounded-circle profile-pic me-2" width="32" height="32">
+                      <span>{{ Auth::user()->name ?? 'User' }}</span>
+                      <i class="mdi mdi-chevron-down ms-1"></i>
                   </a>
-                  <div class="dropdown-menu dropdown-menu-right" aria-labelledby="userDropdown">
-                      <form method="POST" action="{{ route('logout') }}">
+                  <div class="dropdown-menu dropdown-menu-right" id="userDropdownMenu" aria-labelledby="userDropdown" style="
+                      min-width: 200px !important; 
+                      z-index: 99999 !important; 
+                      background: white !important; 
+                      border: 2px solid #007bff !important;
+                      position: absolute !important;
+                      right: 0 !important;
+                      top: 100% !important;
+                      display: none !important;
+                      border-radius: 8px !important;
+                      box-shadow: 0 8px 25px rgba(0,0,0,0.3) !important;
+                      margin-top: 5px !important;
+                  ">
+                      <div class="dropdown-header" style="background: #f8f9fa; padding: 10px 15px;">
+                          <h6 class="mb-0" style="color: #333;">{{ Auth::user()->name ?? 'User' }}</h6>
+                          <small class="text-muted">{{ Auth::user()->email ?? '' }}</small>
+                      </div>
+                      <div class="dropdown-divider"></div>
+                      <a class="dropdown-item" href="{{ route('admin.users.edit', Auth::id()) }}" style="color: #333; text-decoration: none; padding: 12px 16px; display: flex; align-items: center; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#f8f9fa'" onmouseout="this.style.backgroundColor='white'">
+                          <i class="mdi mdi-account-outline me-2"></i> Profile
+                      </a>
+                      <a class="dropdown-item" href="#" style="color: #333; text-decoration: none; padding: 12px 16px; display: flex; align-items: center; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#f8f9fa'" onmouseout="this.style.backgroundColor='white'">
+                          <i class="mdi mdi-settings-outline me-2"></i> Settings
+                      </a>
+                      <div class="dropdown-divider"></div>
+                      <form method="POST" action="{{ route('logout') }}" class="mb-0">
                           @csrf
-                          <button type="submit" class="dropdown-item">Logout</button>
+                          <button type="submit" class="dropdown-item" style="color: #dc3545; background: none; border: none; width: 100%; text-align: left; padding: 12px 16px; display: flex; align-items: center; cursor: pointer; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#f8f9fa'" onmouseout="this.style.backgroundColor='white'">
+                              <i class="mdi mdi-logout me-2"></i> Logout
+                          </button>
                       </form>
                   </div>
                 </li>

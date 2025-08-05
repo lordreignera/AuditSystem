@@ -1,25 +1,31 @@
 {{-- Auditor Assigned Audits Section --}}
 @role('Auditor')
+    @php
+        $user = auth()->user();
+        $assignedAudits = $user->assignedAudits()->with('country')->limit(5)->get();
+        $auditData = [];
+        
+        foreach($assignedAudits as $audit) {
+            $status = now()->gt($audit->end_date) ? 'Completed' : 'In Progress';
+            $statusClass = now()->gt($audit->end_date) ? 'success' : 'warning';
+            $actionText = now()->gt($audit->end_date) ? 'View' : 'Continue';
+            $actionClass = now()->gt($audit->end_date) ? 'info' : 'primary';
+            
+            $auditData[] = [
+                $audit->name,
+                $audit->country->name ?? 'N/A',
+                'status' => ['text' => $status, 'class' => $statusClass],
+                $audit->end_date ? $audit->end_date->format('M d, Y') : 'No deadline',
+                'action' => ['url' => route('admin.audits.dashboard', $audit), 'text' => $actionText, 'class' => $actionClass]
+            ];
+        }
+    @endphp
+    
     @include('admin.dashboard.components.data-table', [
         'title' => 'My Assigned Audits',
-        'viewAllUrl' => url('my-audits'),
-        'headers' => ['Audit Code', 'Type', 'Status', 'Deadline', 'Action'],
-        'data' => [
-            [
-                'AUD-2025-004',
-                'Health Facility',
-                'status' => ['text' => 'In Progress', 'class' => 'warning'],
-                now()->addDays(5)->format('M d, Y'),
-                'action' => ['url' => '#', 'text' => 'Continue', 'class' => 'primary']
-            ],
-            [
-                'AUD-2025-005',
-                'District Health',
-                'status' => ['text' => 'Not Started', 'class' => 'info'],
-                now()->addDays(10)->format('M d, Y'),
-                'action' => ['url' => '#', 'text' => 'Start', 'class' => 'success']
-            ]
-        ],
+        'viewAllUrl' => route('admin.audits.index'),
+        'headers' => ['Audit Name', 'Country', 'Status', 'Deadline', 'Action'],
+        'data' => $auditData,
         'emptyMessage' => 'No assigned audits found'
     ])
 @endrole

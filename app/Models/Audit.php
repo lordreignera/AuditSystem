@@ -110,4 +110,22 @@ class Audit extends Model
 
         return $code;
     }
+
+    /**
+     * Get users assigned to this audit
+     */
+    public function assignedUsers()
+    {
+        return $this->belongsToMany(User::class, 'user_audit_assignments')
+                    ->withPivot('assigned_by', 'assigned_at')
+                    ->withTimestamps();
+    }
+
+    /**
+     * Get audit assignments for this audit
+     */
+    public function userAssignments()
+    {
+        return $this->hasMany(UserAuditAssignment::class);
+    }
 }

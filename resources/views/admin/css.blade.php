@@ -185,4 +185,63 @@
         color: inherit !important;
     }
 
+    /* Force Table Text Visibility - Highest Priority */
+    .data-table-container .table,
+    .data-table-container .table tbody,
+    .data-table-container .table tbody tr,
+    .data-table-container .table tbody td {
+        background-color: #ffffff !important;
+        color: #333333 !important;
+    }
+
+    .data-table-container .table tbody td {
+        font-weight: 500 !important;
+        padding: 12px 15px !important;
+        border-bottom: 1px solid #e2e8f0 !important;
+    }
+
+    .data-table-container .table thead th {
+        background-color: #f8f9fa !important;
+        color: #495057 !important;
+        font-weight: 600 !important;
+        border-bottom: 2px solid #dee2e6 !important;
+        padding: 12px 15px !important;
+    }
+
+    /* Force text color in all table elements */
+    .data-table-container table,
+    .data-table-container table *:not(.badge):not(.btn) {
+        color: #333333 !important;
+    }
+
+    /* Force ALL table content to be visible regardless of theme */
+    .table,
+    .table *,
+    .table td,
+    .table th,
+    .table tbody td,
+    .table thead th {
+        color: #333333 !important;
+        background-color: #ffffff !important;
+    }
+
+    .table thead th {
+        background-color: #f8f9fa !important;
+        color: #495057 !important;
+    }
+
+    /* Override dark theme table styles */
+    .main-panel .table,
+    .main-panel .table td,
+    .main-panel .table th,
+    .content-wrapper .table,
+    .content-wrapper .table td,
+    .content-wrapper .table th,
+    .card-body .table,
+    .card-body .table td,
+    .card-body .table th {
+        color: #333333 !important;
+        background-color: #ffffff !important;
+    }
+
     </style>

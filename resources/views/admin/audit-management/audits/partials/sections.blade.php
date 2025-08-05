@@ -14,9 +14,13 @@
                             {{ $template->name }}
                         </h6>
                         <div>
-                            <button class="btn btn-outline-primary btn-sm me-2" type="button" onclick="previewTemplate({{ $template->id }})">
-                                <i class="mdi mdi-eye"></i> Preview
-                            </button>
+                            {{-- Auditors can duplicate templates but not preview --}}
+                            @unless(auth()->user()->hasRole('Auditor'))
+                                <button class="btn btn-outline-primary btn-sm me-2" type="button" onclick="previewTemplate({{ $template->id }})">
+                                    <i class="mdi mdi-eye"></i> Preview
+                                </button>
+                            @endunless
+                            
                             <button class="btn btn-outline-success btn-sm" type="button" onclick="duplicateTemplate({{ $template->id }})">
                                 <i class="mdi mdi-content-copy"></i> Duplicate
                             </button>
@@ -32,23 +36,25 @@
                                         <i class="mdi mdi-folder-outline me-2"></i>
                                         {{ $section->name }}
                                     </h6>
-                                    @if($reviewType->isMaster)
-                                    <div class="btn-group btn-group-sm">
-                                        <button class="btn btn-outline-success" type="button" onclick="addQuestion({{ $section->id }})">
-                                            <i class="mdi mdi-plus"></i> Add Question
-                                        </button>
-                                        <button class="btn btn-outline-warning" type="button" onclick="editSection({{ $section->id }})">
-                                            <i class="mdi mdi-pencil"></i>
-                                        </button>
-                                        <button class="btn btn-outline-danger" type="button" onclick="deleteSection({{ $section->id }})">
-                                            <i class="mdi mdi-delete"></i>
-                                        </button>
-                                    </div>
-                                    @else
-                                    <div class="text-muted small">
-                                        <i class="mdi mdi-information me-1"></i>Structure managed by master
-                                    </div>
-                                    @endif
+                                    @unless(auth()->user()->hasRole('Auditor'))
+                                        @if($reviewType->isMaster)
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn btn-outline-success" type="button" onclick="addQuestion({{ $section->id }})">
+                                                <i class="mdi mdi-plus"></i> Add Question
+                                            </button>
+                                            <button class="btn btn-outline-warning" type="button" onclick="editSection({{ $section->id }})">
+                                                <i class="mdi mdi-pencil"></i>
+                                            </button>
+                                            <button class="btn btn-outline-danger" type="button" onclick="deleteSection({{ $section->id }})">
+                                                <i class="mdi mdi-delete"></i>
+                                            </button>
+                                        </div>
+                                        @else
+                                        <div class="text-muted small">
+                                            <i class="mdi mdi-information me-1"></i>Structure managed by master
+                                        </div>
+                                        @endif
+                                    @endunless
                                 </div>
                                 @if($section->description)
                                     <small class="text-muted">{{ $section->description }}</small>
@@ -154,16 +160,18 @@
                                                         </div>
                                                     </div>
                                                 </div>
-                                                @if($reviewType->isMaster)
-                                                <div class="btn-group btn-group-sm">
-                                                    <button class="btn btn-outline-warning" type="button" onclick="editQuestion({{ $question->id }})">
-                                                        <i class="mdi mdi-pencil"></i>
-                                                    </button>
-                                                    <button class="btn btn-outline-danger" type="button" onclick="deleteQuestion({{ $question->id }})">
-                                                        <i class="mdi mdi-delete"></i>
-                                                    </button>
-                                                </div>
-                                                @endif
+                                                @unless(auth()->user()->hasRole('Auditor'))
+                                                    @if($reviewType->isMaster)
+                                                    <div class="btn-group btn-group-sm">
+                                                        <button class="btn btn-outline-warning" type="button" onclick="editQuestion({{ $question->id }})">
+                                                            <i class="mdi mdi-pencil"></i>
+                                                        </button>
+                                                        <button class="btn btn-outline-danger" type="button" onclick="deleteQuestion({{ $question->id }})">
+                                                            <i class="mdi mdi-delete"></i>
+                                                        </button>
+                                                    </div>
+                                                    @endif
+                                                @endunless
                                             </div>
                                             <div class="text-end mt-3">
                                                 <button type="submit" class="btn btn-primary">
