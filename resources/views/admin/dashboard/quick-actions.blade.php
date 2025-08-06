@@ -17,7 +17,7 @@
         ],
         [
             'title' => 'Generate Report',
-            'url' => route('admin.reports'),
+            'url' => route('admin.reports.index'),
             'class' => 'info',
             'icon' => 'mdi-chart-line',
             'permission' => 'view reports'

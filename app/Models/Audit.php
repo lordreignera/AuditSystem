@@ -62,6 +62,12 @@ class Audit extends Model
         return $this->hasMany(AuditReviewTypeAttachment::class);
     }
 
+    // Alias for attachments - used in reports
+    public function attachedReviewTypes()
+    {
+        return $this->hasMany(AuditReviewTypeAttachment::class);
+    }
+
     // Get responses for this audit
     public function responses()
     {

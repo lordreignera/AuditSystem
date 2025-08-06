@@ -271,9 +271,10 @@ Route::middleware([
             return $reviewType->templates()->where('is_active', true)->orderBy('name')->get(['id', 'name']);
         });
         
-        Route::get('/reports', function () {
-            return view('admin.reports.index');
-        })->name('admin.reports');
+        // Reports Routes
+        Route::get('reports', [\App\Http\Controllers\Admin\ReportController::class, 'index'])->name('admin.reports.index');
+        Route::get('reports/{audit}', [\App\Http\Controllers\Admin\ReportController::class, 'show'])->name('admin.reports.show');
+        Route::post('reports/{audit}/generate', [\App\Http\Controllers\Admin\ReportController::class, 'generateAiReport'])->name('admin.reports.generate');
         
         // Review Types management
         Route::resource('review-types', \App\Http\Controllers\Admin\ReviewTypeController::class, [

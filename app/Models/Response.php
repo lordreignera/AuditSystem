@@ -55,4 +55,12 @@ class Response extends Model
     {
         return $this->belongsTo(User::class, 'created_by');
     }
+
+    /**
+     * Alias for creator - used in reports
+     */
+    public function user()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
 }

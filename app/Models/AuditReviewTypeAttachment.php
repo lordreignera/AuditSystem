@@ -50,6 +50,14 @@ class AuditReviewTypeAttachment extends Model
     }
 
     /**
+     * Get all responses for this attachment
+     */
+    public function responses()
+    {
+        return $this->hasMany(Response::class, 'attachment_id');
+    }
+
+    /**
      * Check if this is a duplicate attachment
      */
     public function isDuplicate(): bool
