@@ -51,7 +51,7 @@ class UserController extends Controller
             'roles.*' => 'exists:roles,name',
             'audits' => 'array',
             'audits.*' => 'exists:audits,id',
-            'profile_photo' => 'nullable|image|max:2048',
+            'profile_photo' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
         ]);
 
         $data = [
@@ -61,6 +61,7 @@ class UserController extends Controller
             'email_verified_at' => now(), // Auto-verify for admin created users
         ];
 
+        // Handle profile photo upload
         if ($request->hasFile('profile_photo')) {
             $data['profile_photo_path'] = $request->file('profile_photo')->store('profile-photos', 'public');
         }
@@ -126,7 +127,7 @@ class UserController extends Controller
             'roles.*' => 'exists:roles,name',
             'audits' => 'array',
             'audits.*' => 'exists:audits,id',
-            'profile_photo' => 'nullable|image|max:2048',
+            'profile_photo' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
         ]);
 
         $data = [

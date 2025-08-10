@@ -18,7 +18,7 @@
             </div>
             @can('create audits')
                 <div class="d-flex justify-content-between align-items-end flex-wrap">
-                    <a href="{{ route('admin.audits.create') }}" class="btn btn-primary mt-2 mt-xl-0 text-white">
+                    <a href="{{ route('admin.audits.create') }}" class="btn btn-primary mt-2 mt-xl-0 text-white" style="color: #ffffff !important;">
                         <i class="mdi mdi-plus"></i> Create New Audit
                     </a>
                 </div>

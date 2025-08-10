@@ -27,8 +27,37 @@
             <div class="card-body">
                 <h6 class="card-title">User Information</h6>
                 
-                <form method="POST" action="{{ route('admin.users.store') }}">
+                <form method="POST" action="{{ route('admin.users.store') }}" enctype="multipart/form-data">
                     @csrf
+                    
+                    <!-- Profile Photo Section -->
+                    <div class="row mb-4">
+                        <div class="col-md-12">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h6 class="card-title">Profile Photo</h6>
+                                    <div class="d-flex align-items-center">
+                                        <div class="me-3">
+                                            <div class="avatar avatar-xl">
+                                                <img id="profile-preview" src="https://via.placeholder.com/80x80/e3e6f0/6c757d?text=Photo" 
+                                                     alt="Profile Preview" class="rounded-circle" width="80" height="80">
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <div class="mb-2">
+                                                <input type="file" class="form-control @error('profile_photo') is-invalid @enderror" 
+                                                       id="profile_photo" name="profile_photo" accept="image/*" onchange="previewImage(this)">
+                                                @error('profile_photo')
+                                                    <div class="invalid-feedback">{{ $message }}</div>
+                                                @enderror
+                                            </div>
+                                            <small class="text-muted">Upload a profile photo (JPG, PNG, GIF - Max 2MB)</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     
                     <div class="row">
                         <div class="col-md-6">
@@ -190,6 +219,16 @@
 
 @push('scripts')
 <script>
+function previewImage(input) {
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            document.getElementById('profile-preview').src = e.target.result;
+        };
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     const roleCheckboxes = document.querySelectorAll('.role-checkbox');
     const auditSection = document.getElementById('audit-assignment-section');

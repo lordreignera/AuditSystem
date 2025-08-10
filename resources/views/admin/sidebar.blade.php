@@ -5,8 +5,8 @@
       <div class="profile-desc">
         <div class="profile-pic">
           <div class="count-indicator">
-            @if(Auth::check() && Auth::user()->profile_photo_path)
-              <img class="img-xs rounded-circle" src="{{ asset('user_images/' . Auth::user()->profile_photo_path) }}" alt="Profile Picture">
+            @if(Auth::check())
+              <img class="img-xs rounded-circle" src="{{ Auth::user()->profile_photo_url }}" alt="Profile Picture">
             @else
               <img class="img-xs rounded-circle" src="admin/assets/images/faces/face15.jpg" alt="Default Profile Picture">
             @endif
@@ -195,21 +195,19 @@
     </li>
     @endcan
 
-    <!-- Templates by Review Type (ONLY show default templates, never audit-specific copies) -->
-    @can('view templates')
+    <!-- Template Management -->
+    @can('manage templates')
     <li class="nav-item menu-items">
-      <a class="nav-link" data-bs-toggle="collapse" href="#templatesByType" aria-expanded="false" aria-controls="templatesByType">
+      <a class="nav-link" data-bs-toggle="collapse" href="#templateManagement" aria-expanded="false" aria-controls="templateManagement">
         <span class="menu-icon"><i class="mdi mdi-file-document-box-multiple"></i></span>
-        <span class="menu-title">Audit Templates</span>
+        <span class="menu-title">Template Management</span>
         <i class="menu-arrow"></i>
       </a>
-      <div class="collapse" id="templatesByType">
+      <div class="collapse" id="templateManagement">
         <ul class="nav flex-column sub-menu">
-          @can('manage templates')
-          <li class="nav-item"><a class="nav-link" href="{{ url('templates/create') }}">Create Template</a></li>
-          <li class="nav-item"><a class="nav-link" href="{{ url('templates/manage') }}">Manage Templates</a></li>
+          <li class="nav-item"><a class="nav-link" href="{{ route('admin.templates.index') }}"><i class="mdi mdi-file-document-box"></i> All Templates</a></li>
+          <li class="nav-item"><a class="nav-link" href="{{ route('admin.templates.create') }}"><i class="mdi mdi-file-document-plus"></i> Create Template</a></li>
           <hr>
-          @endcan
           @php
             try {
               $reviewTypes = \App\Models\ReviewType::where('is_active', true)->get();
@@ -229,6 +227,63 @@
                     $defaultTemplates = \App\Models\Template::where('review_type_id', $type->id)
                       ->where('is_default', true)
                       ->whereNull('audit_id')
+                      ->orderBy('id')
+                      ->get();
+                  @endphp
+                  @if($defaultTemplates->count() > 0)
+                    @foreach($defaultTemplates as $template)
+                      <li class="nav-item">
+                        <a class="nav-link" href="{{ route('admin.templates.show', $template) }}">
+                          {{ $template->name }}
+                        </a>
+                      </li>
+                    @endforeach
+                  @else
+                    <li class="nav-item">
+                      <a class="nav-link text-muted" href="{{ route('admin.templates.create') }}">
+                        <i class="mdi mdi-plus"></i> Create first template
+                      </a>
+                    </li>
+                  @endif
+                </ul>
+              </div>
+            </li>
+          @endforeach
+        </ul>
+      </div>
+    </li>
+    @endcan
+
+    <!-- Templates by Review Type (ONLY show default templates, never audit-specific copies) -->
+    @can('view templates')
+    <li class="nav-item menu-items">
+      <a class="nav-link" data-bs-toggle="collapse" href="#templatesByType" aria-expanded="false" aria-controls="templatesByType">
+        <span class="menu-icon"><i class="mdi mdi-clipboard-text"></i></span>
+        <span class="menu-title">Create Audits</span>
+        <i class="menu-arrow"></i>
+      </a>
+      <div class="collapse" id="templatesByType">
+        <ul class="nav flex-column sub-menu">
+          @php
+            try {
+              $reviewTypes = \App\Models\ReviewType::where('is_active', true)->get();
+            } catch (\Exception $e) {
+              $reviewTypes = collect();
+            }
+          @endphp
+          @foreach($reviewTypes as $type)
+            <li class="nav-item">
+              <a class="nav-link" data-bs-toggle="collapse" href="#audit-templates-{{ $type->id }}" aria-expanded="false" aria-controls="audit-templates-{{ $type->id }}">
+                <span class="menu-title">{{ $type->name }}</span>
+                <i class="menu-arrow"></i>
+              </a>
+              <div class="collapse" id="audit-templates-{{ $type->id }}">
+                <ul class="nav flex-column sub-menu">
+                  @php
+                    $defaultTemplates = \App\Models\Template::where('review_type_id', $type->id)
+                      ->where('is_default', true)
+                      ->whereNull('audit_id')
+                      ->orderBy('id')
                       ->get();
                   @endphp
                   @if($defaultTemplates->count() > 0)
@@ -240,7 +295,11 @@
                       </li>
                     @endforeach
                   @else
-                    <li class="nav-item"><a class="nav-link text-muted" href="#">No default templates yet</a></li>
+                    <li class="nav-item">
+                      <a class="nav-link text-muted" href="{{ route('admin.templates.create') }}">
+                        No templates available
+                      </a>
+                    </li>
                   @endif
                 </ul>
               </div>

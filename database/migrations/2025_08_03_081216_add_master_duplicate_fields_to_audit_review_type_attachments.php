@@ -19,8 +19,8 @@ return new class extends Migration
             // Duplicate numbering (1 = master, 2,3,4... = duplicates)
             $table->integer('duplicate_number')->default(1)->after('master_attachment_id');
             
-            // Rename facility_name to location_name for better context
-            $table->renameColumn('facility_name', 'location_name');
+            // Add location_name column instead of renaming non-existent facility_name
+            $table->string('location_name')->nullable()->after('duplicate_number');
             
             // Add index for better performance with custom name
             $table->index(['audit_id', 'review_type_id', 'master_attachment_id'], 'arta_audit_review_master_idx');
@@ -33,10 +33,19 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('audit_review_type_attachments', function (Blueprint $table) {
-            $table->dropForeign(['master_attachment_id']);
-            $table->dropColumn(['master_attachment_id', 'duplicate_number']);
-            $table->dropIndex('arta_audit_review_master_idx');
-            $table->renameColumn('location_name', 'facility_name');
+            // Check if index exists before dropping
+            $sm = Schema::getConnection()->getDoctrineSchemaManager();
+            $indexesFound = $sm->listTableIndexes('audit_review_type_attachments');
+            
+            if (array_key_exists('arta_audit_review_master_idx', $indexesFound)) {
+                $table->dropIndex('arta_audit_review_master_idx');
+            }
+            
+            // Check if foreign key exists before dropping
+            if (Schema::hasColumn('audit_review_type_attachments', 'master_attachment_id')) {
+                $table->dropForeign(['master_attachment_id']);
+                $table->dropColumn(['master_attachment_id', 'duplicate_number', 'location_name']);
+            }
         });
     }
 };

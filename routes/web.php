@@ -281,6 +281,25 @@ Route::middleware([
             'as' => 'admin'
         ]);
         
+        // Template Management Routes (Default Templates)
+        Route::resource('templates', \App\Http\Controllers\Admin\TemplateManagement\TemplateController::class, [
+            'as' => 'admin'
+        ]);
+        Route::post('templates/{template}/add-section', [\App\Http\Controllers\Admin\TemplateManagement\TemplateController::class, 'addSection'])
+            ->name('admin.templates.add-section');
+        Route::put('templates/{template}/update-section', [\App\Http\Controllers\Admin\TemplateManagement\TemplateController::class, 'updateSection'])
+            ->name('admin.templates.update-section');
+        Route::delete('templates/{template}/delete-section', [\App\Http\Controllers\Admin\TemplateManagement\TemplateController::class, 'deleteSection'])
+            ->name('admin.templates.delete-section');
+        Route::post('templates/{template}/add-question', [\App\Http\Controllers\Admin\TemplateManagement\TemplateController::class, 'addQuestion'])
+            ->name('admin.templates.add-question');
+        Route::put('templates/{template}/update-question', [\App\Http\Controllers\Admin\TemplateManagement\TemplateController::class, 'updateQuestion'])
+            ->name('admin.templates.update-question');
+        Route::delete('templates/{template}/delete-question', [\App\Http\Controllers\Admin\TemplateManagement\TemplateController::class, 'deleteQuestion'])
+            ->name('admin.templates.delete-question');
+        Route::post('templates/{template}/duplicate', [\App\Http\Controllers\Admin\TemplateManagement\TemplateController::class, 'duplicate'])
+            ->name('admin.templates.duplicate');
+        
         // Review Types CRUD with Template Structure
         Route::prefix('review-types-crud')->group(function () {
             Route::get('/', [\App\Http\Controllers\Admin\ReviewTypeCrudController::class, 'index'])->name('admin.review-types-crud.index');

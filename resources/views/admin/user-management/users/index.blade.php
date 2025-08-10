@@ -13,7 +13,7 @@
                 </div>
             </div>
             <div class="d-flex justify-content-between align-items-end flex-wrap">
-                <a href="{{ route('admin.users.create') }}" class="btn btn-primary text-black mb-3 mb-md-0">
+                <a href="{{ route('admin.users.create') }}" class="btn btn-primary mb-3 mb-md-0" style="color: #ffffff !important;">
                     <i class="mdi mdi-plus"></i> Add New User
                 </a>
             </div>
