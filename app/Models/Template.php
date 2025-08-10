@@ -78,4 +78,12 @@ class Template extends Model
     {
         return $query->where('is_default', true);
     }
+
+    /**
+     * Scope a query to order templates systematically.
+     */
+    public function scopeOrdered($query)
+    {
+        return $query->orderBy('id'); // Maintain systematic database order
+    }
 }

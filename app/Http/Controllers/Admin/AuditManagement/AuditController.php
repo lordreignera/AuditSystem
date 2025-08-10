@@ -183,6 +183,7 @@ class AuditController extends Controller
                 ->where('audit_id', $audit->id)
                 ->where('is_active', true)
                 ->with(['sections.questions'])
+                ->ordered() // Use the systematic ordering scope
                 ->get();
             
             // If no audit-specific templates exist, this attachment is broken - skip it
@@ -220,12 +221,14 @@ class AuditController extends Controller
         $defaultTemplates = Template::where('review_type_id', $reviewTypeId)
             ->whereNull('audit_id')
             ->with('sections.questions')
+            ->ordered() // Use systematic ordering
             ->get();
 
         // Get audit-specific templates for this review type
         $auditTemplates = Template::where('review_type_id', $reviewTypeId)
             ->where('audit_id', $audit->id)
             ->with('sections.questions')
+            ->ordered() // Use the systematic ordering scope
             ->get();
 
         // Map default questions by a unique key (e.g., section order + question order)
@@ -355,6 +358,7 @@ class AuditController extends Controller
                 ->whereNull('audit_id') // Default templates only
                 ->where('is_active', true)
                 ->with(['sections.questions'])
+                ->ordered() // Use systematic ordering
                 ->get();
 
             if ($defaultTemplates->isEmpty()) {
@@ -942,6 +946,7 @@ class AuditController extends Controller
             ->where('audit_id', $audit->id)
             ->where('is_active', true)
             ->with(['sections.questions'])
+            ->ordered() // Use the systematic ordering scope
             ->get();
         
         // Create a simple review type object for the view
