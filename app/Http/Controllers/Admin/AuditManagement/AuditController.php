@@ -14,6 +14,7 @@ use App\Models\AuditTemplateCustomization;
 use App\Models\AuditQuestionCustomization;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Schema;
 use App\Models\Response;
 
 class AuditController extends Controller
@@ -460,17 +461,31 @@ class AuditController extends Controller
             }
             
             // Clean up any legacy customizations (if they exist)
-            AuditTemplateCustomization::where('audit_id', $audit->id)
-                ->whereHas('defaultTemplate', function($query) use ($reviewTypeId) {
-                    $query->where('review_type_id', $reviewTypeId);
-                })
-                ->delete();
+            try {
+                if (Schema::hasTable('audit_template_customizations')) {
+                    AuditTemplateCustomization::where('audit_id', $audit->id)
+                        ->whereHas('defaultTemplate', function($query) use ($reviewTypeId) {
+                            $query->where('review_type_id', $reviewTypeId);
+                        })
+                        ->delete();
+                }
+            } catch (\Exception $e) {
+                // Ignore if table doesn't exist or model isn't available
+                \Log::info('Skipping audit_template_customizations cleanup: ' . $e->getMessage());
+            }
                 
-            AuditQuestionCustomization::where('audit_id', $audit->id)
-                ->whereHas('defaultQuestion.section.template', function($query) use ($reviewTypeId) {
-                    $query->where('review_type_id', $reviewTypeId);
-                })
-                ->delete();
+            try {
+                if (Schema::hasTable('audit_question_customizations')) {
+                    AuditQuestionCustomization::where('audit_id', $audit->id)
+                        ->whereHas('defaultQuestion.section.template', function($query) use ($reviewTypeId) {
+                            $query->where('review_type_id', $reviewTypeId);
+                        })
+                        ->delete();
+                }
+            } catch (\Exception $e) {
+                // Ignore if table doesn't exist or model isn't available
+                \Log::info('Skipping audit_question_customizations cleanup: ' . $e->getMessage());
+            }
 
             $reviewType = ReviewType::findOrFail($reviewTypeId);
             

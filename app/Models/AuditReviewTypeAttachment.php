@@ -10,6 +10,11 @@ class AuditReviewTypeAttachment extends Model
     protected $fillable = [
         'audit_id',
         'review_type_id',
+        'file_name',
+        'file_path',
+        'file_type',
+        'file_size',
+        'description',
         'master_attachment_id',
         'duplicate_number',
         'location_name' // Renamed from facility_name for better context
