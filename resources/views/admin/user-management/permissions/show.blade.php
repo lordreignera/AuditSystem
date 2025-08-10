@@ -1,6 +1,6 @@
 @extends('admin.admin_layout')
 
-@section('title', 'Permission Details - Health Audit System')
+@section('title', 'Permission Details - ERA Health Audit Suite')
 
 @section('content')
 <div class="row">

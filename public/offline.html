@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ERA Audit System - Offline</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+        .offline-container {
+            text-align: center;
+            max-width: 500px;
+            padding: 2rem;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        .offline-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            opacity: 0.8;
+        }
+        h1 {
+            margin: 0 0 1rem 0;
+            font-size: 2rem;
+            font-weight: 300;
+        }
+        p {
+            margin: 0 0 2rem 0;
+            font-size: 1.1rem;
+            opacity: 0.9;
+            line-height: 1.6;
+        }
+        .retry-btn {
+            background: #4fd1c7;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-right: 10px;
+        }
+        .retry-btn:hover {
+            background: #45b8ae;
+            transform: translateY(-2px);
+        }
+        .home-btn {
+            background: transparent;
+            color: white;
+            border: 2px solid white;
+            padding: 10px 25px;
+            border-radius: 25px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .home-btn:hover {
+            background: white;
+            color: #667eea;
+        }
+        .status-indicator {
+            margin-top: 2rem;
+            padding: 1rem;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            font-size: 0.9rem;
+        }
+        .online {
+            background: rgba(76, 175, 80, 0.3);
+        }
+        .offline {
+            background: rgba(244, 67, 54, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="offline-container">
+        <div class="offline-icon">📱</div>
+        <h1>ERA Audit System</h1>
+        <p>You're currently offline, but the app is ready to work! Your data will be saved locally and synced when you're back online.</p>
+        
+        <button class="retry-btn" onclick="window.location.reload()">
+            🔄 Try Again
+        </button>
+        <a href="/admin" class="home-btn">
+            🏠 Go to Dashboard
+        </a>
+        
+        <div id="status" class="status-indicator offline">
+            🔴 Offline Mode - Data will be saved locally
+        </div>
+    </div>
+
+    <script>
+        // Update connection status
+        function updateStatus() {
+            const status = document.getElementById('status');
+            if (navigator.onLine) {
+                status.className = 'status-indicator online';
+                status.innerHTML = '🟢 Back Online - Redirecting to dashboard...';
+                setTimeout(() => {
+                    window.location.href = '/admin';
+                }, 2000);
+            } else {
+                status.className = 'status-indicator offline';
+                status.innerHTML = '🔴 Offline Mode - Data will be saved locally';
+            }
+        }
+
+        // Listen for connection changes
+        window.addEventListener('online', updateStatus);
+        window.addEventListener('offline', updateStatus);
+        
+        // Initial status check
+        updateStatus();
+        
+        // Auto-retry every 10 seconds
+        setInterval(() => {
+            if (navigator.onLine) {
+                window.location.href = '/admin';
+            }
+        }, 10000);
+    </script>
+</body>
+</html>

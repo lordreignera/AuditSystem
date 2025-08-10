@@ -432,8 +432,14 @@ class AuditController extends Controller
                 ->where('audit_id', $audit->id)
                 ->get();
                 
+            // First, delete ALL responses for this review type from ALL attachments
+            $attachmentIds = $attachments->pluck('id');
+            Response::where('audit_id', $audit->id)
+                ->whereIn('attachment_id', $attachmentIds)
+                ->delete();
+                
             foreach ($auditTemplates as $template) {
-                // Delete all responses for questions in this template (from all attachments)
+                // Also delete any remaining responses by question (safety net)
                 foreach ($template->sections as $section) {
                     foreach ($section->questions as $question) {
                         $question->responses()->where('audit_id', $audit->id)->delete();
@@ -754,8 +760,15 @@ class AuditController extends Controller
             );
         }
 
-        // Redirect back to the URL specified in the form, fallback to audit page
-        return redirect($request->input('redirect_to', route('admin.audits.show', $request->audit_id)))
+        // Redirect back to the current page (stay on same page) or fallback to audit page
+        $redirectUrl = $request->input('redirect_to');
+        
+        // If no specific redirect URL provided, use the previous URL (current page)
+        if (!$redirectUrl) {
+            $redirectUrl = url()->previous();
+        }
+        
+        return redirect($redirectUrl)
             ->with('success', 'Response saved successfully.');
     }
 

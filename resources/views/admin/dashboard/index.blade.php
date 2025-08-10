@@ -1,7 +1,7 @@
 {{-- Main Dashboard Index --}}
 @extends('admin.admin_layout')
 
-@section('title', 'Health Audit System - Dashboard')
+@section('title', 'ERA Health Audit Suite - Dashboard')
 
 @section('content')
 {{-- Header Section --}}
@@ -11,7 +11,7 @@
             <div class="d-flex align-items-end flex-wrap">
                 <div class="me-md-3 me-xl-5">
                     <h2 style="color: #2d3748 !important; font-weight: 600;">Welcome, {{ Auth::user()->name }}!</h2>
-                    <p class="mb-md-0" style="color: #718096 !important;">Your Health Audit System dashboard overview</p>
+                    <p class="mb-md-0" style="color: #718096 !important;">Your ERA Health Audit Suite dashboard overview</p>
                 </div>
             </div>
         </div>

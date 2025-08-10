@@ -1,24 +1,6 @@
 @extends('admin.admin_layout')
 
-@section('title', 'Permission M    <div class="col-xl-3 col-sm-6 grid-margin stretch-card">
-        <div class="card audit-card" style="background-color: white !important;">
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-9">
-                        <div class="d-flex align-items-center align-self-start">
-                            <h3 class="mb-0" style="color: #2d3748 !important;">{{ \Spatie\Permission\Models\Role::count() }}</h3>
-                        </div>
-                        <h6 class="text-muted font-weight-normal">Total Roles</h6>
-                    </div>
-                    <div class="col-3">
-                        <div class="icon icon-box-success">
-                            <span class="mdi mdi-account-group icon-item"></span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>Audit System')
+@section('title', 'Permission Management - ERA Health Audit Suite')
 
 @section('content')
 <div class="row">

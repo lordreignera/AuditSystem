@@ -107,40 +107,54 @@ class ReportController extends Controller
         $reviewTypesData = [];
         
         $attachments = AuditReviewTypeAttachment::where('audit_id', $audit->id)
-            ->with(['reviewType', 'responses.question'])
+            ->with(['reviewType.templates.sections.questions', 'responses.question'])
             ->get()
             ->groupBy('review_type_id');
 
         foreach ($attachments as $reviewTypeId => $locationAttachments) {
-            $reviewType = $locationAttachments->first()->reviewType;
+            $firstAttachment = $locationAttachments->first();
+            
+            // Skip if no valid attachment or review type
+            if (!$firstAttachment || !$firstAttachment->reviewType) {
+                continue;
+            }
+            
+            $reviewType = $firstAttachment->reviewType;
             $locations = [];
 
             foreach ($locationAttachments as $attachment) {
-                $responseCount = $attachment->responses->count();
-                $totalQuestions = $reviewType->templates()
-                    ->with('sections.questions')
-                    ->get()
-                    ->sum(function($template) {
-                        return $template->sections->sum(function($section) {
-                            return $section->questions->count();
+                try {
+                    $responseCount = $attachment->responses->count();
+                    $totalQuestions = $reviewType->templates()
+                        ->with('sections.questions')
+                        ->get()
+                        ->sum(function($template) {
+                            return $template->sections->sum(function($section) {
+                                return $section->questions->count();
+                            });
                         });
-                    });
 
-                $locations[] = [
-                    'attachment_id' => $attachment->id,
-                    'location_name' => $attachment->location_name,
-                    'is_master' => $attachment->is_master,
-                    'duplicate_number' => $attachment->duplicate_number,
-                    'response_count' => $responseCount,
-                    'total_questions' => $totalQuestions,
-                    'completion_percentage' => $totalQuestions > 0 ? round(($responseCount / $totalQuestions) * 100, 1) : 0
-                ];
+                    $locations[] = [
+                        'attachment_id' => $attachment->id,
+                        'location_name' => $attachment->getContextualLocationName(),
+                        'is_master' => $attachment->is_master,
+                        'duplicate_number' => $attachment->duplicate_number,
+                        'response_count' => $responseCount,
+                        'total_questions' => $totalQuestions,
+                        'completion_percentage' => $totalQuestions > 0 ? round(($responseCount / $totalQuestions) * 100, 1) : 0
+                    ];
+                } catch (\Exception $e) {
+                    // Log the error but continue processing other attachments
+                    \Log::warning("Error processing attachment {$attachment->id}: " . $e->getMessage());
+                }
             }
 
-            $reviewTypesData[] = [
-                'review_type' => $reviewType,
-                'locations' => $locations
-            ];
+            if (!empty($locations)) {
+                $reviewTypesData[] = [
+                    'review_type' => $reviewType,
+                    'locations' => $locations
+                ];
+            }
         }
 
         return $reviewTypesData;
@@ -152,7 +166,8 @@ class ReportController extends Controller
     private function getResponseStatistics(Audit $audit)
     {
         $responses = Response::where('audit_id', $audit->id)
-            ->with(['question', 'attachment'])
+            ->with(['question', 'attachment.reviewType'])
+            ->whereHas('attachment') // Only get responses with valid attachments
             ->get();
 
         $stats = [
@@ -164,18 +179,29 @@ class ReportController extends Controller
 
         // Group by response type
         $responsesByType = $responses->groupBy(function($response) {
-            return $response->question->response_type;
+            return $response->question ? $response->question->response_type : 'unknown';
         });
 
         foreach ($responsesByType as $type => $typeResponses) {
             $stats['by_type'][$type] = $typeResponses->count();
         }
 
-        // Group by location
+        // Group by location with better error handling
         $responsesByLocation = $responses->groupBy('attachment_id');
         foreach ($responsesByLocation as $attachmentId => $locationResponses) {
             $attachment = $locationResponses->first()->attachment;
-            $stats['by_location'][$attachment->location_name] = $locationResponses->count();
+            if ($attachment && $attachment->reviewType) {
+                try {
+                    $locationName = $attachment->getContextualLocationName();
+                    $stats['by_location'][$locationName] = $locationResponses->count();
+                } catch (\Exception $e) {
+                    // Fallback if getContextualLocationName fails
+                    $stats['by_location']['Location ' . $attachmentId] = $locationResponses->count();
+                }
+            } else {
+                // Handle case where attachment or reviewType is null
+                $stats['by_location']['Unknown Location'] = $locationResponses->count();
+            }
         }
 
         return $stats;
@@ -208,49 +234,59 @@ class ReportController extends Controller
         }
 
         foreach ($attachments as $attachment) {
-            $reviewTypeData = [
-                'name' => $attachment->reviewType->name,
-                'location' => $attachment->location_name,
-                'is_master' => $attachment->is_master,
-                'sections' => []
-            ];
-
-            // Get responses for this attachment
-            $responses = $attachment->responses->keyBy('question_id');
-
-            foreach ($attachment->reviewType->templates as $template) {
-                foreach ($template->sections as $section) {
-                    $sectionData = [
-                        'name' => $section->name,
-                        'description' => $section->description,
-                        'questions' => []
-                    ];
-
-                    foreach ($section->questions as $question) {
-                        $response = $responses->get($question->id);
-                        
-                        $questionData = [
-                            'question_text' => $question->question_text,
-                            'description' => $question->description,
-                            'response_type' => $question->response_type,
-                            'is_required' => $question->is_required,
-                            'answer' => null,
-                            'audit_note' => null
-                        ];
-
-                        if ($response) {
-                            $questionData['answer'] = $this->formatResponseAnswer($response, $question);
-                            $questionData['audit_note'] = $response->audit_note;
-                        }
-
-                        $sectionData['questions'][] = $questionData;
-                    }
-
-                    $reviewTypeData['sections'][] = $sectionData;
-                }
+            // Skip invalid attachments
+            if (!$attachment || !$attachment->reviewType) {
+                continue;
             }
 
-            $data['review_types'][] = $reviewTypeData;
+            try {
+                $reviewTypeData = [
+                    'name' => $attachment->reviewType->name,
+                    'location' => $attachment->getContextualLocationName(),
+                    'is_master' => $attachment->is_master,
+                    'sections' => []
+                ];
+
+                // Get responses for this attachment
+                $responses = $attachment->responses->keyBy('question_id');
+
+                foreach ($attachment->reviewType->templates as $template) {
+                    foreach ($template->sections as $section) {
+                        $sectionData = [
+                            'name' => $section->name,
+                            'description' => $section->description,
+                            'questions' => []
+                        ];
+
+                        foreach ($section->questions as $question) {
+                            $response = $responses->get($question->id);
+                            
+                            $questionData = [
+                                'question_text' => $question->question_text,
+                                'description' => $question->description,
+                                'response_type' => $question->response_type,
+                                'is_required' => $question->is_required,
+                                'answer' => null,
+                                'audit_note' => null
+                            ];
+
+                            if ($response) {
+                                $questionData['answer'] = $this->formatResponseAnswer($response, $question);
+                                $questionData['audit_note'] = $response->audit_note;
+                            }
+
+                            $sectionData['questions'][] = $questionData;
+                        }
+
+                        $reviewTypeData['sections'][] = $sectionData;
+                    }
+                }
+
+                $data['review_types'][] = $reviewTypeData;
+            } catch (\Exception $e) {
+                // Log error but continue processing other attachments
+                \Log::warning("Error processing attachment {$attachment->id} in collectAuditData: " . $e->getMessage());
+            }
         }
 
         return $data;

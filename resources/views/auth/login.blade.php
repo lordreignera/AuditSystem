@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    <title>Health Audit System - Login</title>
+    <title>ERA Health Audit Suite - Login</title>
     
     <!-- Admin Template CSS -->
     <link rel="stylesheet" href="{{ asset('admin/assets/vendors/mdi/css/materialdesignicons.min.css') }}">
@@ -268,7 +268,7 @@
                 <div class="login-logo">
                     <i class="mdi mdi-hospital-building"></i>
                 </div>
-                <h2 class="login-title">Health Audit System</h2>
+                <h2 class="login-title">ERA Health Audit Suite</h2>
                 <p class="login-subtitle">Sign in to access your dashboard</p>
             </div>
             
@@ -345,14 +345,14 @@
                 </button>
             </form>
             
-            <!-- Demo Credentials -->
+            <!-- Demo Credentials 
             <div class="demo-credentials">
                 <h6><i class="mdi mdi-information"></i> Demo Credentials</h6>
                 <p><strong>Super Admin:</strong> superadmin@audit.com / SuperAdmin123!</p>
                 <p><strong>Admin:</strong> admin@audit.com / Admin123!</p>
                 <p><strong>Audit Manager:</strong> manager@audit.com / Manager123!</p>
                 <p><strong>Auditor:</strong> auditor@audit.com / Auditor123!</p>
-            </div>
+            </div> -->
             
             <!-- System Info -->
             <div class="system-info">

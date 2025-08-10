@@ -160,3 +160,208 @@
         }
     };
     </script>
+
+    <!-- PWA Integration Scripts -->
+    <script src="/admin/assets/js/offline-manager.js"></script>
+    
+    <!-- PWA Install Prompt -->
+    <script>
+        let deferredPrompt;
+        let installButton = null;
+
+        // Create install button
+        function createInstallButton() {
+            if (installButton) return;
+            
+            installButton = document.createElement('button');
+            installButton.className = 'btn btn-sm btn-outline-primary me-2';
+            installButton.innerHTML = '<i class="mdi mdi-download me-1"></i>Install App';
+            installButton.style.display = 'none';
+            
+            installButton.addEventListener('click', async () => {
+                if (deferredPrompt) {
+                    deferredPrompt.prompt();
+                    const { outcome } = await deferredPrompt.userChoice;
+                    console.log(`User response to the install prompt: ${outcome}`);
+                    deferredPrompt = null;
+                    installButton.style.display = 'none';
+                }
+            });
+            
+            // Add to navbar
+            const navbar = document.querySelector('.navbar .navbar-nav');
+            if (navbar) {
+                const installContainer = document.createElement('li');
+                installContainer.className = 'nav-item';
+                installContainer.appendChild(installButton);
+                navbar.insertBefore(installContainer, navbar.firstChild);
+            }
+        }
+
+        // Listen for PWA install prompt
+        window.addEventListener('beforeinstallprompt', (e) => {
+            console.log('PWA install prompt available');
+            e.preventDefault();
+            deferredPrompt = e;
+            createInstallButton();
+            if (installButton) {
+                installButton.style.display = 'block';
+            }
+        });
+
+        // PWA installed
+        window.addEventListener('appinstalled', () => {
+            console.log('PWA was installed');
+            if (installButton) {
+                installButton.style.display = 'none';
+            }
+            if (window.auditOfflineManager) {
+                window.auditOfflineManager.showNotification('ERA Audit System installed successfully!', 'success');
+            }
+        });
+
+        // Check if already installed
+        if (window.matchMedia('(display-mode: standalone)').matches) {
+            console.log('Running in standalone mode - PWA is installed');
+        }
+    </script>
+
+    <!-- Enhanced Form Support for Offline -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Add offline support to forms
+            const forms = document.querySelectorAll('form[data-offline-support="true"]');
+            
+            forms.forEach(form => {
+                // Auto-save functionality
+                const formInputs = form.querySelectorAll('input, select, textarea');
+                formInputs.forEach(input => {
+                    input.addEventListener('input', debounce(() => {
+                        if (!navigator.onLine && window.auditOfflineManager) {
+                            const formData = new FormData(form);
+                            const data = Object.fromEntries(formData.entries());
+                            window.auditOfflineManager.saveDraft(data);
+                        }
+                    }, 2000));
+                });
+
+                // Handle form submission
+                form.addEventListener('submit', async function(e) {
+                    if (!navigator.onLine && window.auditOfflineManager) {
+                        e.preventDefault();
+                        
+                        const formData = new FormData(form);
+                        const data = Object.fromEntries(formData.entries());
+                        
+                        // Save response offline
+                        if (data.question_id && data.audit_id) {
+                            const result = await window.auditOfflineManager.saveResponseOffline(
+                                data.audit_id,
+                                data.question_id,
+                                data.answer,
+                                data.attachment_id || null
+                            );
+                            
+                            if (result.success) {
+                                // Clear form or show success message
+                                form.reset();
+                            }
+                        }
+                    }
+                });
+            });
+        });
+
+        // Debounce function for auto-save
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+    </script>
+
+    <!-- PWA Scripts -->
+    <script src="admin/assets/js/offline-manager.js"></script>
+    
+    <!-- PWA Service Worker Registration -->
+    <script>
+        // Register Service Worker for PWA functionality
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw-advanced.js')
+                    .then(registration => {
+                        console.log('✅ PWA Service Worker registered successfully:', registration);
+                        
+                        // Check for updates
+                        registration.addEventListener('updatefound', () => {
+                            console.log('🔄 PWA update found, new version available');
+                        });
+                    })
+                    .catch(error => {
+                        console.log('❌ PWA Service Worker registration failed:', error);
+                    });
+            });
+        }
+
+        // PWA Install Prompt
+        let deferredPrompt;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            console.log('💡 PWA install prompt available');
+            e.preventDefault();
+            deferredPrompt = e;
+            
+            // Show install button or banner
+            showInstallButton();
+        });
+
+        function showInstallButton() {
+            // Create install button if not exists
+            if (!document.getElementById('pwa-install-btn')) {
+                const installBtn = document.createElement('button');
+                installBtn.id = 'pwa-install-btn';
+                installBtn.className = 'btn btn-primary btn-sm position-fixed';
+                installBtn.style.cssText = 'bottom: 20px; right: 20px; z-index: 1000; border-radius: 25px;';
+                installBtn.innerHTML = '<i class="mdi mdi-download"></i> Install App';
+                installBtn.onclick = installPWA;
+                document.body.appendChild(installBtn);
+            }
+        }
+
+        function installPWA() {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                deferredPrompt.userChoice.then((choiceResult) => {
+                    if (choiceResult.outcome === 'accepted') {
+                        console.log('✅ User accepted PWA install');
+                    } else {
+                        console.log('❌ User dismissed PWA install');
+                    }
+                    deferredPrompt = null;
+                    
+                    // Hide install button
+                    const installBtn = document.getElementById('pwa-install-btn');
+                    if (installBtn) installBtn.remove();
+                });
+            }
+        }
+
+        // PWA Installation Success
+        window.addEventListener('appinstalled', () => {
+            console.log('🎉 PWA was installed successfully');
+            
+            // Hide install button
+            const installBtn = document.getElementById('pwa-install-btn');
+            if (installBtn) installBtn.remove();
+            
+            // Show success message
+            if (window.auditOfflineManager) {
+                window.auditOfflineManager.showNotification('🎉 ERA Audit installed successfully!', 'success');
+            }
+        });
+    </script>

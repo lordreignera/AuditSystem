@@ -67,7 +67,7 @@
                                         @csrf
                                         <input type="hidden" name="audit_id" value="{{ $audit->id }}">
                                         <input type="hidden" name="attachment_id" value="{{ $reviewType->attachmentId }}">
-                                        <input type="hidden" name="redirect_to" value="{{ route('admin.audits.dashboard', $audit) }}">
+                                        <input type="hidden" name="redirect_to" value="{{ url()->current() }}">
                                         <input type="hidden" name="active_template_index" class="active-template-index-input" value="0">
                                         @php
                                             $existingResponse = $question->responses()
@@ -254,8 +254,8 @@ if($reviewType->auditTemplates && $reviewType->auditTemplates->count() > 0) {
         <div class="modal-dialog modal-xl">
             <div class="modal-content bg-white">
                 <div class="modal-header bg-light">
-                    <h5 class="modal-title text-dark" id="tableModalLabel-{{ $modalQuestion->id }}">
-                        Table Answer: {{ $modalQuestion->question_text }}
+                    <h5 class="modal-title text-dark" style="background-color: white" id="tableModalLabel-{{ $modalQuestion->id }}">
+                        Table Question: {{ $modalQuestion->question_text }}
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
@@ -264,7 +264,7 @@ if($reviewType->auditTemplates && $reviewType->auditTemplates->count() > 0) {
                         @csrf
                         <input type="hidden" name="audit_id" value="{{ $audit->id }}">
                         <input type="hidden" name="attachment_id" value="{{ $reviewType->attachmentId }}">
-                        <input type="hidden" name="redirect_to" value="{{ route('admin.audits.dashboard', $audit) }}#tableModal-{{ $modalQuestion->id }}">
+                        <input type="hidden" name="redirect_to" value="{{ url()->current() }}#tableModal-{{ $modalQuestion->id }}">
                         <div class="mb-3">
                             <label for="headerRows-{{ $modalQuestion->id }}" class="form-label">Number of Header Rows</label>
                             <input type="number" min="1" max="{{ count($rows) }}" class="form-control form-control-sm w-auto d-inline-block" style="width: 80px;" name="answers[{{ $modalQuestion->id }}][header_rows]" id="headerRows-{{ $modalQuestion->id }}" value="{{ $options['header_rows'] ?? 1 }}">

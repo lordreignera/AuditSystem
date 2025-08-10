@@ -142,7 +142,7 @@
                     <div class="modal-dialog modal-xl">
                         <div class="modal-content bg-white">
                             <div class="modal-header bg-light">
-                                <h5 class="modal-title text-dark" id="tableModalLabel{{ $question->id }}">
+                                <h5 class="modal-title text-white" id="tableModalLabel{{ $question->id }}">
                                     Table Structure: {{ $question->question_text }}
                                 </h5>
                                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>

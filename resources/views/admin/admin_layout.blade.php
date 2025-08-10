@@ -5,6 +5,18 @@
     <!-- Required meta tags -->
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <meta name="user-id" content="{{ auth()->id() }}">
+    
+    <!-- PWA Meta Tags -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#4fd1c7">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="ERA Audit">
+    <meta name="msapplication-TileColor" content="#4fd1c7">
+    <meta name="msapplication-tap-highlight" content="no">
+    
     <base href="/public">
     <title>Health Audit System - @yield('title', 'Dashboard')</title>
     <!-- plugins:css -->
@@ -234,6 +246,9 @@
     </style>
 </head>
 <body>
+    <!-- Offline Indicator -->
+    <div id="offline-indicator" style="position: fixed; top: 0; left: 0; right: 0; z-index: 9999; display: none;"></div>
+    
     @include('admin.header')
     <!-- partial:partials/_sidebar.html -->
     @include('admin.sidebar')
@@ -251,5 +266,8 @@
     <!-- plugins:js -->
     @include('admin.java')
     <!-- End custom js for this page -->
+    
+    <!-- Custom page scripts -->
+    @stack('scripts')
 </body>
 </html>

@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    <title>Health Audit System - Register</title>
+    <title>ERA Health Audit Suite - Register</title>
     
     <!-- Admin Template CSS -->
     <link rel="stylesheet" href="{{ asset('admin/assets/vendors/mdi/css/materialdesignicons.min.css') }}">
@@ -215,7 +215,7 @@
                     <i class="mdi mdi-account-plus"></i>
                 </div>
                 <h2 class="register-title">Create Account</h2>
-                <p class="register-subtitle">Join the Health Audit System</p>
+                <p class="register-subtitle">Join the ERA Health Audit Suite</p>
             </div>
             
             <!-- Validation Errors -->
@@ -282,6 +282,50 @@
                            required 
                            autocomplete="new-password">
                 </div>
+
+                <!-- Role Selection -->
+                <div class="form-group">
+                    <label for="role" class="form-label">Select Your Role</label>
+                    <select id="role" name="role" class="form-control-custom" required>
+                        <option value="">Choose your role...</option>
+                        @php
+                            $roles = \Spatie\Permission\Models\Role::whereNotIn('name', ['Super Admin'])->get();
+                        @endphp
+                        @foreach($roles as $role)
+                            <option value="{{ $role->name }}" {{ old('role') == $role->name ? 'selected' : '' }}>
+                                {{ $role->name }}
+                                @if($role->description)
+                                    - {{ $role->description }}
+                                @endif
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+
+                <!-- Audit Assignment (shown only for Auditor role) -->
+                <div class="form-group" id="audit-assignment-section" style="display: none;">
+                    <label for="audit_id" class="form-label">Select Audit to Manage</label>
+                    <div style="background: #e2e8f0; padding: 12px; border-radius: 8px; margin-bottom: 10px; font-size: 13px; color: #2c5282;">
+                        <i class="mdi mdi-information"></i> As an auditor, you'll be assigned to manage one specific audit. You'll only see this audit in your dashboard.
+                    </div>
+                    <select id="audit_id" name="audit_id" class="form-control-custom">
+                        <option value="">Choose an audit...</option>
+                        @php
+                            $audits = \App\Models\Audit::with('country')
+                                ->whereDate('end_date', '>=', now())
+                                ->orderBy('start_date', 'desc')
+                                ->get();
+                        @endphp
+                        @foreach($audits as $audit)
+                            <option value="{{ $audit->id }}" {{ old('audit_id') == $audit->id ? 'selected' : '' }}>
+                                {{ $audit->name }} ({{ $audit->country->name ?? 'Unknown' }})
+                                @if($audit->end_date)
+                                    - Due: {{ $audit->end_date->format('M d, Y') }}
+                                @endif
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
                 
                 @if (Laravel\Jetstream\Jetstream::hasTermsAndPrivacyPolicyFeature())
                     <div class="terms-checkbox">
@@ -309,35 +353,30 @@
     <!-- Scripts -->
     <script src="{{ asset('admin/assets/vendors/js/vendor.bundle.base.js') }}"></script>
     <script src="{{ asset('admin/assets/js/misc.js') }}"></script>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const roleSelect = document.getElementById('role');
+            const auditSection = document.getElementById('audit-assignment-section');
+            const auditSelect = document.getElementById('audit_id');
+            
+            function toggleAuditSection() {
+                if (roleSelect.value === 'Auditor') {
+                    auditSection.style.display = 'block';
+                    auditSelect.required = true;
+                } else {
+                    auditSection.style.display = 'none';
+                    auditSelect.required = false;
+                    auditSelect.value = '';
+                }
+            }
+            
+            // Check on page load
+            toggleAuditSection();
+            
+            // Add event listener
+            roleSelect.addEventListener('change', toggleAuditSection);
+        });
+    </script>
 </body>
 </html>
-
-            @if (Laravel\Jetstream\Jetstream::hasTermsAndPrivacyPolicyFeature())
-                <div class="mt-4">
-                    <x-label for="terms">
-                        <div class="flex items-center">
-                            <x-checkbox name="terms" id="terms" required />
-
-                            <div class="ms-2">
-                                {!! __('I agree to the :terms_of_service and :privacy_policy', [
-                                        'terms_of_service' => '<a target="_blank" href="'.route('terms.show').'" class="underline text-sm text-gray-600 hover:text-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">'.__('Terms of Service').'</a>',
-                                        'privacy_policy' => '<a target="_blank" href="'.route('policy.show').'" class="underline text-sm text-gray-600 hover:text-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">'.__('Privacy Policy').'</a>',
-                                ]) !!}
-                            </div>
-                        </div>
-                    </x-label>
-                </div>
-            @endif
-
-            <div class="flex items-center justify-end mt-4">
-                <a class="underline text-sm text-gray-600 hover:text-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500" href="{{ route('login') }}">
-                    {{ __('Already registered?') }}
-                </a>
-
-                <x-button class="ms-4">
-                    {{ __('Register') }}
-                </x-button>
-            </div>
-        </form>
-    </x-authentication-card>
-</x-guest-layout>
