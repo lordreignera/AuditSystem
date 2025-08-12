@@ -14,6 +14,8 @@ class ExampleTest extends TestCase
     {
         $response = $this->get('/');
 
-        $response->assertStatus(200);
+        // The home route redirects to login, so we expect a 302 redirect
+        $response->assertStatus(302);
+        $response->assertRedirect(route('login'));
     }
 }
