@@ -92,28 +92,7 @@ Route::get('/debug-auditor', function() {
     return $html;
 });
 
-// Logout route for testing
-Route::post('/logout', function () {
-    auth()->logout();
-    session()->invalidate();
-    session()->regenerateToken();
-    return redirect('/');
-})->name('logout');
 
-// Simple logout page with form for testing
-Route::get('/logout-page', function () {
-    return '
-    <html>
-    <body>
-        <h2>Logout</h2>
-        <form method="POST" action="/logout">
-            ' . csrf_field() . '
-            <button type="submit">Logout</button>
-        </form>
-        <p><a href="/">Go to Home</a></p>
-    </body>
-    </html>';
-})->name('logout.page');
 
 Route::middleware([
     'auth:sanctum',
@@ -253,6 +232,20 @@ Route::middleware([
             ->name('admin.audits.remove-duplicate');
         Route::get('audits/{audit}/load-sections', [\App\Http\Controllers\Admin\AuditManagement\AuditController::class, 'loadSections'])
             ->name('admin.audits.load-sections');
+        
+        // Excel Import/Export routes
+        Route::get('audits/{audit}/export-attachment/{attachmentId}', [\App\Http\Controllers\Admin\ExcelImportExportController::class, 'exportAttachment'])
+            ->name('admin.audits.export-attachment');
+        Route::get('audits/{audit}/download-blank-template/{reviewTypeId}', [\App\Http\Controllers\Admin\ExcelImportExportController::class, 'downloadBlankTemplate'])
+            ->name('admin.audits.download-blank-template');
+        Route::get('audits/{audit}/import-excel', [\App\Http\Controllers\Admin\ExcelImportExportController::class, 'showGeneralImportForm'])
+            ->name('admin.audits.import-excel');
+        Route::get('audits/{audit}/import-form/{reviewTypeId}', [\App\Http\Controllers\Admin\ExcelImportExportController::class, 'showImportForm'])
+            ->name('admin.audits.show-import-form');
+        Route::post('audits/{audit}/import-excel/{reviewTypeId}', [\App\Http\Controllers\Admin\ExcelImportExportController::class, 'importExcel'])
+            ->name('admin.audits.process-import-excel');
+        Route::post('audits/{audit}/preview-import/{reviewTypeId}', [\App\Http\Controllers\Admin\ExcelImportExportController::class, 'previewImport'])
+            ->name('admin.audits.preview-import');
         
         // API routes for AJAX requests
         Route::get('api/templates/{template}', function(\App\Models\Template $template) {

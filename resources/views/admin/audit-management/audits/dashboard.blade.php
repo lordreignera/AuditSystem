@@ -181,9 +181,14 @@
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">Review Types & Templates</h5>
-                <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addReviewTypeModal">
-                    <i class="mdi mdi-plus me-1"></i>Attach Review Type
-                </button>
+                <div class="d-flex gap-2">
+                    <a href="{{ route('admin.audits.import-excel', $audit->id) }}" class="btn btn-success btn-sm">
+                        <i class="mdi mdi-file-excel me-1"></i>Import Excel
+                    </a>
+                    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addReviewTypeModal">
+                        <i class="mdi mdi-plus me-1"></i>Attach Review Type
+                    </button>
+                </div>
             </div>
             <div class="card-body">
                 @if($attachedReviewTypes && $attachedReviewTypes->count() > 0)
@@ -208,6 +213,20 @@
                                                 <button class="btn btn-outline-secondary btn-sm ms-2" type="button" onclick="renameLocation({{ $reviewType->attachmentId ?? 0 }}, '{{ $reviewType->locationName ?? '' }}')" title="Rename Location">
                                                     <i class="mdi mdi-pencil"></i> Rename
                                                 </button>
+                                                
+                                                <!-- Excel Export Button - For ALL attachments -->
+                                                <a href="{{ route('admin.audits.export-attachment', [$audit->id, $reviewType->attachmentId]) }}" 
+                                                   class="btn btn-outline-success btn-sm ms-2" 
+                                                   title="Export to Excel">
+                                                    <i class="mdi mdi-file-excel"></i> Export Excel
+                                                </a>
+                                                
+                                                <!-- Excel Import Button - For ALL attachments -->
+                                                <a href="{{ route('admin.audits.show-import-form', [$audit->id, $reviewType->id]) }}" 
+                                                   class="btn btn-outline-primary btn-sm ms-2" 
+                                                   title="Import from Excel">
+                                                    <i class="mdi mdi-file-excel-box"></i> Import Excel
+                                                </a>
                                                 
                                                 <!-- Remove Duplicate Button - Only for Duplicates -->
                                                 @if($reviewType->isDuplicate)

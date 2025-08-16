@@ -17,7 +17,6 @@
     <meta name="msapplication-TileColor" content="#4fd1c7">
     <meta name="msapplication-tap-highlight" content="no">
     
-    <base href="/public">
     <title>Health Audit System - @yield('title', 'Dashboard')</title>
     <!-- plugins:css -->
     @include('admin.css')
