@@ -165,66 +165,90 @@
     <script src="/admin/assets/js/offline-manager.js"></script>
     
     <!-- PWA Install Prompt -->
-    <script>
-        let deferredPrompt;
-        let installButton = null;
+// ...existing code...
 
-        // Create install button
-        function createInstallButton() {
-            if (installButton) return;
-            
-            installButton = document.createElement('button');
-            installButton.className = 'btn btn-sm btn-outline-primary me-2';
-            installButton.innerHTML = '<i class="mdi mdi-download me-1"></i>Install App';
-            installButton.style.display = 'none';
-            
-            installButton.addEventListener('click', async () => {
-                if (deferredPrompt) {
-                    deferredPrompt.prompt();
-                    const { outcome } = await deferredPrompt.userChoice;
-                    console.log(`User response to the install prompt: ${outcome}`);
-                    deferredPrompt = null;
-                    installButton.style.display = 'none';
-                }
-            });
-            
-            // Add to navbar
-            const navbar = document.querySelector('.navbar .navbar-nav');
-            if (navbar) {
-                const installContainer = document.createElement('li');
-                installContainer.className = 'nav-item';
-                installContainer.appendChild(installButton);
-                navbar.insertBefore(installContainer, navbar.firstChild);
-            }
-        }
+<script>
+    let deferredPrompt;
+    let installButton = null;
 
-        // Listen for PWA install prompt
-        window.addEventListener('beforeinstallprompt', (e) => {
-            console.log('PWA install prompt available');
-            e.preventDefault();
-            deferredPrompt = e;
-            createInstallButton();
-            if (installButton) {
-                installButton.style.display = 'block';
-            }
+    // Register Service Worker for PWA functionality
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw-advanced.js')
+                .then(registration => {
+                    console.log('✅ PWA Service Worker registered successfully:', registration);
+                    
+                    // Check for updates
+                    registration.addEventListener('updatefound', () => {
+                        console.log('🔄 PWA update found, new version available');
+                    });
+                })
+                .catch(error => {
+                    console.log('❌ PWA Service Worker registration failed:', error);
+                });
         });
+    }
 
-        // PWA installed
-        window.addEventListener('appinstalled', () => {
-            console.log('PWA was installed');
-            if (installButton) {
+    // Create install button
+    function createInstallButton() {
+        if (installButton) return;
+        
+        installButton = document.createElement('button');
+        installButton.className = 'btn btn-sm btn-outline-primary me-2';
+        installButton.innerHTML = '<i class="mdi mdi-download me-1"></i>Install App';
+        installButton.style.display = 'none';
+        
+        installButton.addEventListener('click', async () => {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                const { outcome } = await deferredPrompt.userChoice;
+                console.log(`User response to the install prompt: ${outcome}`);
+                deferredPrompt = null;
                 installButton.style.display = 'none';
             }
-            if (window.auditOfflineManager) {
-                window.auditOfflineManager.showNotification('ERA Audit System installed successfully!', 'success');
-            }
         });
-
-        // Check if already installed
-        if (window.matchMedia('(display-mode: standalone)').matches) {
-            console.log('Running in standalone mode - PWA is installed');
+        
+        // Add to navbar
+        const navbar = document.querySelector('.navbar .navbar-nav');
+        if (navbar) {
+            const installContainer = document.createElement('li');
+            installContainer.className = 'nav-item';
+            installContainer.appendChild(installButton);
+            navbar.insertBefore(installContainer, navbar.firstChild);
         }
+    }
+
+    // PWA Install Prompt
+    window.addEventListener('beforeinstallprompt', (e) => {
+        console.log('💡 PWA install prompt available');
+        e.preventDefault();
+        deferredPrompt = e;
+        
+        createInstallButton();
+        if (installButton) {
+            installButton.style.display = 'block';
+        }
+    });
+
+    // PWA Installation Success
+    window.addEventListener('appinstalled', () => {
+        console.log('🎉 PWA was installed successfully');
+        
+        if (installButton) {
+            installButton.style.display = 'none';
+        }
+        
+        if (window.auditOfflineManager) {
+            window.auditOfflineManager.showNotification('🎉 ERA Audit installed successfully!', 'success');
+        }
+    });
+
+    // Check if already installed
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+        console.log('Running in standalone mode - PWA is installed');
+    }
     </script>
+// ...existing code...
 
     <!-- Enhanced Form Support for Offline -->
     <script>

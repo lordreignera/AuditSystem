@@ -1,4 +1,4 @@
-@extends('layouts.admin')
+@extends('admin.admin_layout')
 
 @section('title', 'Import Excel - ' . $audit->name)
 

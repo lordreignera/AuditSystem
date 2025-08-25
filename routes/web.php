@@ -1,6 +1,8 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Admin\ExcelImportExportController;
+
 
 /*
 |--------------------------------------------------------------------------
@@ -234,24 +236,49 @@ Route::middleware([
             ->name('admin.audits.load-sections');
         
         // Excel Import/Export routes
-        Route::get('audits/{audit}/export-attachment/{attachmentId}', [\App\Http\Controllers\Admin\ExcelImportExportController::class, 'exportAttachment'])
-            ->name('admin.audits.export-attachment');
-        Route::get('audits/{audit}/download-blank-template/{reviewTypeId}', [\App\Http\Controllers\Admin\ExcelImportExportController::class, 'downloadBlankTemplate'])
-            ->name('admin.audits.download-blank-template');
-        Route::get('audits/{audit}/import-excel', [\App\Http\Controllers\Admin\ExcelImportExportController::class, 'showGeneralImportForm'])
-            ->name('admin.audits.import-excel');
-        Route::get('audits/{audit}/import-form/{reviewTypeId}', [\App\Http\Controllers\Admin\ExcelImportExportController::class, 'showImportForm'])
-            ->name('admin.audits.show-import-form');
-        Route::post('audits/{audit}/import-excel/{reviewTypeId}', [\App\Http\Controllers\Admin\ExcelImportExportController::class, 'importExcel'])
-            ->name('admin.audits.process-import-excel');
-        Route::post('audits/{audit}/preview-import/{reviewTypeId}', [\App\Http\Controllers\Admin\ExcelImportExportController::class, 'previewImport'])
-            ->name('admin.audits.preview-import');
+        //Route::get('audits/{audit}/export-attachment/{attachmentId}', [\App\Http\Controllers\Admin\ExcelImportExportController::class, 'exportAttachment'])
+            //->name('admin.audits.export-attachment');
+       // Route::get('audits/{audit}/download-blank-template/{reviewTypeId}', [\App\Http\Controllers\Admin\ExcelImportExportController::class, 'downloadBlankTemplate'])
+           // ->name('admin.audits.download-blank-template');
+       // Route::get('audits/{audit}/import-excel', [\App\Http\Controllers\Admin\ExcelImportExportController::class, 'showGeneralImportForm'])
+           // ->name('admin.audits.import-excel');
+       // Route::get('audits/{audit}/import-form/{reviewTypeId}', [\App\Http\Controllers\Admin\ExcelImportExportController::class, 'showImportForm'])
+           // ->name('admin.audits.show-import-form');
+       // Route::post('audits/{audit}/import-excel/{reviewTypeId}', [\App\Http\Controllers\Admin\ExcelImportExportController::class, 'importExcel'])
+           // ->name('admin.audits.process-import-excel');
+        //Route::post('audits/{audit}/preview-import/{reviewTypeId}', [\App\Http\Controllers\Admin\ExcelImportExportController::class, 'previewImport'])
+            //->name('admin.audits.preview-import');
         
         // API routes for AJAX requests
         Route::get('api/templates/{template}', function(\App\Models\Template $template) {
             return $template->load('reviewType');
         });
-        
+
+
+
+        // Export XLSX booklet for a specific attachment (location)
+        Route::get('admin/audits/{audit}/attachments/{attachment}/export-booklet',
+            [ExcelImportExportController::class, 'exportAttachmentXlsx']
+        )->name('admin.attachments.export.booklet');
+
+        // Import XLSX booklet for a review type (new location or update an existing attachment)
+        Route::post('admin/audits/{audit}/review-types/{reviewType}/import-booklet',
+            [ExcelImportExportController::class, 'importBooklet']
+        )->name('admin.reviewtypes.import.booklet');
+
+        // Add these routes in your admin group
+        Route::get('audits/{audit}/attachments/{attachment}/export-excel', 
+            [ExcelImportExportController::class, 'exportAttachmentXlsx'])
+            ->name('admin.audits.export-attachment-excel');
+
+        Route::get('audits/{audit}/review-types/{reviewType}/import-form', 
+            [ExcelImportExportController::class, 'showImportForm'])
+            ->name('admin.audits.show-import-form');
+
+        Route::post('audits/{audit}/review-types/{reviewType}/import-excel', 
+            [ExcelImportExportController::class, 'importBooklet'])
+            ->name('admin.audits.import-booklet');
+            
         Route::get('api/sections/{section}', function(\App\Models\Section $section) {
             return $section->load('template');
         });
