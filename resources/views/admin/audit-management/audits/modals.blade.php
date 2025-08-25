@@ -1,3 +1,79 @@
+<!-- Import Booklet Modal (Reusable for each Review Type) -->
+@foreach($attachedReviewTypes as $reviewType)
+<div class="modal fade" id="importBookletModal-{{ $reviewType->id }}" tabindex="-1" aria-labelledby="importBookletModalLabel-{{ $reviewType->id }}" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content" style="background-color: #fff; color: #222;">
+            <div class="modal-header" style="background-color: #2574fa;">
+                <h5 class="modal-title text-white" id="importBookletModalLabel-{{ $reviewType->id }}">Import Booklet ({{ $reviewType->name }})</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" action="{{ route('admin.reviewtypes.import.booklet', [$audit->id, $reviewType->id]) }}" enctype="multipart/form-data">
+                @csrf
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">XLSX File</label>
+                        <input type="file" name="excel_file" accept=".xlsx" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Import Mode</label>
+                        <select name="import_mode" class="form-select import-mode-select" data-reviewtype="{{ $reviewType->id }}">
+                            <option value="update" selected>Update selected location</option>
+                            <option value="new">Create new location</option>
+                        </select>
+                    </div>
+                    <div class="mb-3 update-fields" id="updateFields-{{ $reviewType->id }}">
+                        <label class="form-label">Attachment (Location) to update</label>
+                        <input type="text" class="form-control" value="{{ request('selected_attachment_' . $reviewType->id, $reviewType->attachmentId) }}" disabled>
+                        <input type="hidden" name="attachment_id" value="{{ request('selected_attachment_' . $reviewType->id, $reviewType->attachmentId) }}">
+                    </div>
+                    <div class="mb-3 new-fields d-none" id="newFields-{{ $reviewType->id }}">
+                        <label class="form-label">New Location Name</label>
+                        <input type="text" name="location_name" class="form-control" placeholder="e.g., District 4">
+                    </div>
+                </div>
+                <div class="modal-footer" style="border-top: 1px solid #eaeaea;">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Import</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+@endforeach
+
+<!-- Global Import Helper Modal -->
+<div class="modal fade" id="importBookletModal-global" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Import Booklet (XLSX)</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-0">To import responses, open a Review Type below and click its “Import Booklet” button so we can apply the data to the correct location.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.import-mode-select').forEach(function(sel) {
+        sel.addEventListener('change', function() {
+            var reviewTypeId = this.getAttribute('data-reviewtype');
+            var updateFields = document.getElementById('updateFields-' + reviewTypeId);
+            var newFields = document.getElementById('newFields-' + reviewTypeId);
+            if (this.value === 'new') {
+                updateFields.classList.add('d-none');
+                newFields.classList.remove('d-none');
+            } else {
+                newFields.classList.add('d-none');
+                updateFields.classList.remove('d-none');
+            }
+        });
+    });
+});
+</script>
 <!-- Add Review Type Modal -->
 <div class="modal fade" id="addReviewTypeModal" tabindex="-1" aria-labelledby="addReviewTypeModalLabel" aria-hidden="true">
     <div class="modal-dialog">

@@ -497,61 +497,6 @@
                                             @endif
                                         @endif
 
-                                        <!-- Import Booklet Modal FOR THIS REVIEW TYPE -->
-                                        <div class="modal fade" id="importBookletModal-{{ $reviewType->id }}" tabindex="-1" aria-hidden="true">
-                                            <div class="modal-dialog">
-                                                <form method="POST" action="{{ route('admin.reviewtypes.import.booklet', [$audit->id, $reviewType->id]) }}" enctype="multipart/form-data" class="modal-content">
-                                                    @csrf
-                                                    <div class="modal-header">
-                                                        <h5 class="modal-title">Import Booklet ({{ $reviewType->name }})</h5>
-                                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                                    </div>
-                                                    <div class="modal-body">
-                                                        <div class="mb-3">
-                                                            <label class="form-label">XLSX File</label>
-                                                            <input type="file" name="excel_file" accept=".xlsx" class="form-control" required>
-                                                        </div>
-                                                        <div class="mb-3">
-                                                            <label class="form-label">Import Mode</label>
-                                                            <select name="import_mode" class="form-select" id="importModeSelect-{{ $reviewType->id }}">
-                                                                <option value="update" selected>Update selected location</option>
-                                                                <option value="new">Create new location</option>
-                                                            </select>
-                                                        </div>
-                                                        <div class="mb-3" id="updateFields-{{ $reviewType->id }}">
-                                                            <label class="form-label">Attachment (Location) to update</label>
-                                                            <input type="text" class="form-control" value="{{ $selectedAttachmentId }}" disabled>
-                                                            <input type="hidden" name="attachment_id" value="{{ $selectedAttachmentId }}">
-                                                        </div>
-                                                        <div class="mb-3 d-none" id="newFields-{{ $reviewType->id }}">
-                                                            <label class="form-label">New Location Name</label>
-                                                            <input type="text" name="location_name" class="form-control" placeholder="e.g., District 4">
-                                                        </div>
-                                                    </div>
-                                                    <div class="modal-footer">
-                                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                                        <button type="submit" class="btn btn-primary">Import</button>
-                                                    </div>
-                                                </form>
-                                            </div>
-                                        </div>
-                                        <script>
-                                            document.addEventListener('DOMContentLoaded', function() {
-                                                const sel{{ $reviewType->id }} = document.getElementById('importModeSelect-{{ $reviewType->id }}');
-                                                const upd{{ $reviewType->id }} = document.getElementById('updateFields-{{ $reviewType->id }}');
-                                                const neu{{ $reviewType->id }} = document.getElementById('newFields-{{ $reviewType->id }}');
-                                                sel{{ $reviewType->id }}.addEventListener('change', function() {
-                                                    const v = this.value;
-                                                    if (v === 'new') {
-                                                        upd{{ $reviewType->id }}.classList.add('d-none');
-                                                        neu{{ $reviewType->id }}.classList.remove('d-none');
-                                                    } else {
-                                                        neu{{ $reviewType->id }}.classList.add('d-none');
-                                                        upd{{ $reviewType->id }}.classList.remove('d-none');
-                                                    }
-                                                });
-                                            });
-                                        </script>
                                         <!-- END Import modal -->
 
                                         <!-- Danger Zone -->
