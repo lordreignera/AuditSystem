@@ -133,6 +133,14 @@ class ExcelImportExportController extends Controller
             $reader->setReadDataOnly(true);
             $spreadsheet = $reader->load($file);
 
+            // Check if this audit already has established structure
+            $existingTemplates = \App\Models\Template::where('review_type_id', $reviewType->id)
+                ->where('audit_id', $audit->id)
+                ->count();
+            
+            $isFirstImport = ($existingTemplates == 0);
+            Log::info("Import mode: " . ($isFirstImport ? "First import - will create structure" : "Subsequent import - responses only"));
+
             // Build template lookup: prefer audit-specific else default
             $templateMap = $this->buildTemplateLookup($audit, $reviewType->id);
 
@@ -143,6 +151,10 @@ class ExcelImportExportController extends Controller
                 'questions_not_found' => 0,
                 'templates_processed' => 0,
                 'table_questions_imported' => 0,
+                'templates_created' => 0,
+                'sections_created' => 0,
+                'questions_created' => 0,
+                'questions_skipped' => 0,
             ];
 
             $notFoundQuestions = [];
@@ -151,109 +163,47 @@ class ExcelImportExportController extends Controller
             for ($i = 0; $i < $sheetCount; $i++) {
                 $sheet = $spreadsheet->getSheet($i);
                 $sheetName = trim($sheet->getTitle());
-                
-                if (strtolower($sheetName) === 'index') {
-                    continue; // skip index
-                }
 
                 Log::info("Processing sheet: {$sheetName}");
 
-                $template = $this->matchTemplateBySheetName($sheetName, $templateMap);
+                // Try to find or create audit-specific template
+                $template = \App\Models\Template::where('review_type_id', $reviewType->id)
+                    ->where('audit_id', $audit->id)
+                    ->where('name', $sheetName)
+                    ->first();
                 if (!$template) {
-                    Log::warning("Template not found for sheet: {$sheetName}");
-                    continue;
+                    if ($isFirstImport) {
+                        // First import - create audit-specific template
+                        $template = new \App\Models\Template();
+                        $template->name = $sheetName;
+                        $template->review_type_id = $reviewType->id;
+                        $template->audit_id = $audit->id;
+                        $template->description = '';
+                        $template->save();
+                        $templateMap[$this->normalizeName($sheetName)] = $template;
+                        $importStats['templates_created']++;
+                        Log::info("Created new template: {$sheetName} (ID: {$template->id})");
+                    } else {
+                        // Subsequent import - skip unknown sheets
+                        Log::warning("Skipping unknown sheet: {$sheetName} - not found in existing audit templates");
+                        continue;
+                    }
                 }
 
                 $importStats['templates_processed']++;
                 Log::info("Template matched: {$template->name} (ID: {$template->id})");
 
                 $highestRow = $sheet->getHighestDataRow();
-
-                // --- Group table answers by question ---
-                $tableAnswers = []; // [question_id => [ [row1], [row2], ... ] ]
-                $tableNotes = [];   // [question_id => [note1, note2, ...]]
-
-                for ($row = 2; $row <= $highestRow; $row++) {
-                    $importStats['total_rows']++;
-                    
-                    $sectionName   = trim((string) $sheet->getCell("B{$row}")->getValue());
-                    $questionText  = trim((string) $sheet->getCell("E{$row}")->getValue());
-                    $responseType  = trim((string) $sheet->getCell("F{$row}")->getValue());
-                    $answerCell    = $sheet->getCell("J{$row}")->getValue();
-                    $auditNoteCell = $sheet->getCell("K{$row}")->getValue();
-
-                    if ($sectionName === '' && $questionText === '') {
-                        continue;
-                    }
-
-                    // Try exact match first
-                    $question = $this->findQuestion($template->id, $sectionName, $questionText);
-                    if (!$question) {
-                        // Try a more lenient match (normalize whitespace)
-                        $question = $this->findQuestionLenient($template->id, $sectionName, $questionText);
-                    }
-                    
-                    if (!$question) {
-                        $importStats['questions_not_found']++;
-                        $notFoundQuestions[] = [
-                            'sheet' => $sheetName,
-                            'section' => $sectionName,
-                            'question' => $questionText,
-                            'row' => $row
-                        ];
-                        Log::warning("Question not found - Sheet: {$sheetName}, Section: {$sectionName}, Question: {$questionText}");
-                        continue;
-                    }
-
-                    Log::debug("Question matched: {$question->question_text} (ID: {$question->id})");
-
-                    if ($responseType === 'table') {
-                        // Split the answerCell by tab (as exported)
-                        $rowData = is_string($answerCell) ? preg_split('/\t/', $answerCell) : (array)$answerCell;
-                        $tableAnswers[$question->id][] = $rowData;
-                        $tableNotes[$question->id][] = is_null($auditNoteCell) ? '' : (string)$auditNoteCell;
-                        continue;
-                    }
-
-                    $normalizedAnswer = $this->normalizeAnswerForStore($answerCell, $responseType);
-
-                    $response = Response::updateOrCreate(
-                        [
-                            'audit_id'      => $audit->id,
-                            'attachment_id' => $attachment->id,
-                            'question_id'   => $question->id,
-                        ],
-                        [
-                            'answer'     => $normalizedAnswer,
-                            'audit_note' => is_null($auditNoteCell) ? '' : (string)$auditNoteCell,
-                            'created_by' => auth()->id(),
-                        ]
-                    );
-
-                    $importStats['responses_imported']++;
-                    Log::debug("Response saved for question ID: {$question->id}");
-                }
-
-                // Save grouped table answers
-                foreach ($tableAnswers as $questionId => $tableRows) {
-                    $notes = isset($tableNotes[$questionId]) ? implode("\n", $tableNotes[$questionId]) : '';
-                    
-                    $response = Response::updateOrCreate(
-                        [
-                            'audit_id'      => $audit->id,
-                            'attachment_id' => $attachment->id,
-                            'question_id'   => $questionId,
-                        ],
-                        [
-                            'answer'     => ['value' => $tableRows, 'type' => 'table'],
-                            'audit_note' => $notes,
-                            'created_by' => auth()->id(),
-                        ]
-                    );
-
-                    $importStats['table_questions_imported']++;
-                    $importStats['responses_imported']++;
-                    Log::debug("Table response saved for question ID: {$questionId}");
+                
+                // Detect if this is a table format sheet or regular question format
+                $isTableFormat = $this->isTableFormatSheet($sheet, $sheetName);
+                
+                if ($isTableFormat) {
+                    Log::info("Processing table format sheet: {$sheetName}");
+                    $this->processTableFormatSheet($sheet, $template, $audit, $attachment, $importStats, $isFirstImport);
+                } else {
+                    Log::info("Processing regular question format sheet: {$sheetName}");
+                    $this->processRegularFormatSheet($sheet, $template, $audit, $attachment, $importStats, $isFirstImport);
                 }
             }
 
@@ -264,19 +214,26 @@ class ExcelImportExportController extends Controller
             $successMessage = "Booklet imported successfully! ";
             $successMessage .= "Imported {$importStats['responses_imported']} responses ";
             $successMessage .= "from {$importStats['templates_processed']} templates.";
-            
+            if ($importStats['questions_created'] > 0) {
+                $successMessage .= " Created {$importStats['questions_created']} new questions.";
+            }
+            if ($importStats['sections_created'] > 0) {
+                $successMessage .= " Created {$importStats['sections_created']} new sections.";
+            }
+            if ($importStats['templates_created'] > 0) {
+                $successMessage .= " Created {$importStats['templates_created']} new templates.";
+            }
             if ($importStats['questions_not_found'] > 0) {
                 $successMessage .= " Note: {$importStats['questions_not_found']} questions were not found and skipped.";
             }
-
-            // If in debug mode, also log questions not found
+            if ($importStats['questions_skipped'] > 0) {
+                $successMessage .= " {$importStats['questions_skipped']} questions were skipped (structure already exists).";
+            }
             if (!empty($notFoundQuestions)) {
                 Log::warning('Questions not found during import:', $notFoundQuestions);
             }
-
             return redirect()->route('admin.audits.dashboard', $audit)
                 ->with('success', $successMessage);
-                
         } catch (\Exception $e) {
             Log::error('Import booklet failed: ' . $e->getMessage(), [
                 'trace' => $e->getTraceAsString(),
@@ -732,6 +689,300 @@ class ExcelImportExportController extends Controller
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
         $sheet->freezePane('A2');
+    }
+
+    /**
+     * Detect if a sheet is in table format (like Stock count, Stock Out, Expiries)
+     * vs regular question format (like Health Facility)
+     */
+    private function isTableFormatSheet($sheet, $sheetName): bool
+    {
+        // Check for known table format sheets
+        $tableSheets = ['stock count', 'stock out', 'expiries', 'stock dispatch', 'cce'];
+        $lowerSheetName = strtolower($sheetName);
+        
+        foreach ($tableSheets as $tablePattern) {
+            if (stripos($lowerSheetName, $tablePattern) !== false) {
+                return true;
+            }
+        }
+        
+        // Check if it has typical table headers in row 5-8 area
+        for ($row = 5; $row <= 8; $row++) {
+            $cellB = trim((string) $sheet->getCell("B{$row}")->getValue());
+            $cellC = trim((string) $sheet->getCell("C{$row}")->getValue());
+            
+            // Look for table headers like "Name of Vaccine", "UoM", "Batch No.", etc.
+            if (stripos($cellB, 'name of') !== false || 
+                stripos($cellC, 'uom') !== false ||
+                stripos($cellC, 'batch') !== false ||
+                stripos($cellC, 'expiry') !== false) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    /**
+     * Process table format sheets (Stock count, Stock Out, Expiries, etc.)
+     */
+    private function processTableFormatSheet($sheet, $template, $audit, $attachment, &$importStats, $isFirstImport): void
+    {
+        $highestRow = $sheet->getHighestDataRow();
+        $highestCol = $sheet->getHighestDataColumn();
+        
+        // Find the header row (usually around row 5-8)
+        $headerRow = null;
+        $dataStartRow = null;
+        
+        for ($row = 5; $row <= 10; $row++) {
+            $cellB = trim((string) $sheet->getCell("B{$row}")->getValue());
+            if (stripos($cellB, 'name of') !== false || 
+                stripos($cellB, 'vaccine') !== false) {
+                $headerRow = $row;
+                $dataStartRow = $row + 1;
+                break;
+            }
+        }
+        
+        if (!$headerRow) {
+            Log::warning("Could not find header row in table format sheet: {$sheet->getTitle()}");
+            return;
+        }
+        
+        // Extract headers
+        $headers = [];
+        for ($col = 'A'; $col <= $highestCol; $col++) {
+            $headerValue = trim((string) $sheet->getCell($col . $headerRow)->getValue());
+            if (!empty($headerValue)) {
+                $headers[$col] = $headerValue;
+            }
+        }
+        
+        Log::info("Found table headers:", $headers);
+        
+        // Create section for this table (only on first import)
+        $sectionName = $sheet->getTitle() . ' Data';
+        $sectionNameTrunc = mb_substr($sectionName, 0, 255);
+        $section = \App\Models\Section::where('template_id', $template->id)
+            ->where('name', $sectionNameTrunc)
+            ->where('audit_id', $audit->id)
+            ->first();
+        if (!$section) {
+            if ($isFirstImport) {
+                $section = new \App\Models\Section();
+                $section->template_id = $template->id;
+                $section->audit_id = $audit->id;
+                $section->name = $sectionNameTrunc;
+                $section->description = '';
+                $section->order = 0;
+                $section->save();
+                $importStats['sections_created']++;
+                Log::info("Created new section for table: {$sectionNameTrunc} (ID: {$section->id})");
+            } else {
+                Log::warning("Section not found for table sheet: {$sectionNameTrunc} - skipping");
+                return;
+            }
+        }
+        
+        // Create a single table question for this entire table (only on first import)
+        $questionText = "Table data for " . $sheet->getTitle();
+        $question = \App\Models\Question::where('section_id', $section->id)
+            ->where('question_text', $questionText)
+            ->where('audit_id', $audit->id)
+            ->first();
+        if (!$question) {
+            if ($isFirstImport) {
+                $question = new \App\Models\Question();
+                $question->section_id = $section->id;
+                $question->audit_id = $audit->id;
+                $question->question_text = $questionText;
+                $question->response_type = 'table';
+                $question->options = json_encode(['headers' => $headers]);
+                $question->order = 0;
+                $question->is_required = false;
+                $question->save();
+                $importStats['questions_created']++;
+                Log::info("Created new table question: {$questionText} (ID: {$question->id})");
+            } else {
+                Log::warning("Table question not found: {$questionText} - skipping");
+                return;
+            }
+        }
+        
+        // Collect all table data
+        $tableData = [];
+        $tableData[] = array_values($headers); // Add headers as first row
+        
+        for ($row = $dataStartRow; $row <= $highestRow; $row++) {
+            $importStats['total_rows']++;
+            $rowData = [];
+            $hasData = false;
+            
+            foreach ($headers as $col => $header) {
+                $cellValue = $sheet->getCell($col . $row)->getValue();
+                $strValue = $cellValue === null ? '' : (string)$cellValue;
+                $rowData[] = $strValue;
+                if (!empty($strValue)) {
+                    $hasData = true;
+                }
+            }
+            
+            if ($hasData) {
+                $tableData[] = $rowData;
+            }
+        }
+        
+        // Save the table response
+        if (count($tableData) > 1) { // More than just headers
+            $response = Response::updateOrCreate(
+                [
+                    'audit_id'      => $audit->id,
+                    'attachment_id' => $attachment->id,
+                    'question_id'   => $question->id,
+                ],
+                [
+                    'answer'     => ['value' => $tableData, 'type' => 'table'],
+                    'audit_note' => '',
+                    'created_by' => auth()->id(),
+                ]
+            );
+            
+            $importStats['responses_imported']++;
+            $importStats['table_questions_imported']++;
+            Log::info("Table response saved for question ID: {$question->id} with " . (count($tableData) - 1) . " data rows");
+        }
+    }
+
+    /**
+     * Process regular question format sheets (Health Facility, etc.)
+     */
+    private function processRegularFormatSheet($sheet, $template, $audit, $attachment, &$importStats, $isFirstImport): void
+    {
+        // Track current section
+        $currentSection = '';
+        $highestRow = $sheet->getHighestDataRow();
+        
+        for ($row = 2; $row <= $highestRow; $row++) {
+            $importStats['total_rows']++;
+            $cellBValue = trim((string) $sheet->getCell("B{$row}")->getValue());
+            $observationValue = trim((string) $sheet->getCell("E{$row}")->getValue());
+            $remarksValue = trim((string) $sheet->getCell("F{$row}")->getValue());
+
+            // Check if this is a section header (starts with "SECTION")
+            if (stripos($cellBValue, 'SECTION') === 0) {
+                $currentSection = $cellBValue;
+                Log::info("Found section: {$currentSection}");
+                continue;
+            }
+
+            // Skip header rows or instruction rows
+            if (stripos($cellBValue, 'Instructions:') !== false ||
+                stripos($cellBValue, 'All yellow cells') !== false ||
+                stripos($observationValue, 'Observation') !== false ||
+                stripos($remarksValue, 'Remarks') !== false ||
+                stripos($remarksValue, 'Audit Notes') !== false ||
+                empty($cellBValue)) {
+                continue;
+            }
+
+            // This should be a question row
+            $questionText = $cellBValue;
+            $answerCell = $observationValue;
+            $auditNoteCell = $remarksValue;
+            
+            // Use current section as section name
+            $sectionName = $currentSection ?: 'Default Section';
+            
+            // Auto-detect response type based on answer content
+            $responseType = 'text'; // default
+            if (!empty($answerCell)) {
+                $answerLower = strtolower(trim($answerCell));
+                if (in_array($answerLower, ['yes', 'no', 'n/a'])) {
+                    $responseType = 'yes_no';
+                } elseif (is_numeric($answerCell)) {
+                    $responseType = 'number';
+                }
+            }
+
+            // Skip if no question text
+            if (empty($questionText)) {
+                continue;
+            }
+
+            // Find or create section (only on first import)
+            $sectionNameTrunc = mb_substr($sectionName, 0, 255);
+            $section = \App\Models\Section::where('template_id', $template->id)
+                ->where('name', $sectionNameTrunc)
+                ->where('audit_id', $audit->id)
+                ->first();
+            if (!$section) {
+                if ($isFirstImport) {
+                    $section = new \App\Models\Section();
+                    $section->template_id = $template->id;
+                    $section->audit_id = $audit->id;
+                    $section->name = $sectionNameTrunc;
+                    $section->description = '';
+                    $section->order = 0;
+                    $section->save();
+                    $importStats['sections_created']++;
+                    Log::info("Created new section: {$sectionNameTrunc} (ID: {$section->id})");
+                } else {
+                    Log::info("Section not found and not first import - skipping question: {$questionText}");
+                    $importStats['questions_skipped']++;
+                    continue;
+                }
+            }
+
+            // Try to find existing question first
+            $question = \App\Models\Question::where('section_id', $section->id)
+                ->where('question_text', $questionText)
+                ->where('audit_id', $audit->id)
+                ->first();
+            if (!$question) {
+                if ($isFirstImport) {
+                    // Only allow valid response types
+                    $allowedTypes = ['text','textarea','yes_no','select','number','date','table'];
+                    $type = in_array($responseType, $allowedTypes) ? $responseType : 'text';
+                    $question = new \App\Models\Question();
+                    $question->section_id = $section->id;
+                    $question->audit_id = $audit->id;
+                    $question->question_text = $questionText;
+                    $question->response_type = $type;
+                    $question->options = null;
+                    $question->order = 0;
+                    $question->is_required = false;
+                    $question->save();
+                    $importStats['questions_created']++;
+                    Log::info("Created new question: {$questionText} (ID: {$question->id})");
+                } else {
+                    Log::info("Question not found and not first import - skipping: {$questionText}");
+                    $importStats['questions_skipped']++;
+                    continue;
+                }
+            }
+
+            Log::debug("Question matched: {$question->question_text} (ID: {$question->id})");
+
+            $normalizedAnswer = $this->normalizeAnswerForStore($answerCell, $responseType);
+
+            $response = Response::updateOrCreate(
+                [
+                    'audit_id'      => $audit->id,
+                    'attachment_id' => $attachment->id,
+                    'question_id'   => $question->id,
+                ],
+                [
+                    'answer'     => $normalizedAnswer,
+                    'audit_note' => is_null($auditNoteCell) ? '' : (string)$auditNoteCell,
+                    'created_by' => auth()->id(),
+                ]
+            );
+
+            $importStats['responses_imported']++;
+            Log::debug("Response saved for question ID: {$question->id}");
+        }
     }
 // ...existing code...
 

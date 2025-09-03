@@ -271,11 +271,13 @@
                                                     <option value="{{ $reviewType->attachmentId }}" {{ $selectedAttachmentId == $reviewType->attachmentId ? 'selected' : '' }}>
                                                         {{ $reviewType->locationName }} (Master)
                                                     </option>
+                                                    @if(isset($reviewType->duplicates) && is_iterable($reviewType->duplicates))
                                                     @foreach($reviewType->duplicates as $duplicate)
                                                         <option value="{{ $duplicate->attachmentId }}" {{ $selectedAttachmentId == $duplicate->attachmentId ? 'selected' : '' }}>
                                                             {{ $duplicate->locationName }} (Duplicate #{{ $duplicate->duplicateNumber }})
                                                         </option>
                                                     @endforeach
+                                                    @endif
                                                 </select>
                                             </div>
 
@@ -288,6 +290,7 @@
                                                     </button>
                                                 </div>
                                                 <!-- Duplicate location actions -->
+                                                @if(isset($reviewType->duplicates) && is_iterable($reviewType->duplicates))
                                                 @foreach($reviewType->duplicates as $duplicate)
                                                     <div class="location-actions {{ $selectedAttachmentId == $duplicate->attachmentId ? '' : 'd-none' }}" data-attachment-id="{{ $duplicate->attachmentId }}">
                                                         <button class="btn btn-sm btn-warning me-2" onclick="renameLocation({{ $duplicate->attachmentId }}, '{{ $duplicate->locationName }}')">
@@ -298,6 +301,7 @@
                                                         </button>
                                                     </div>
                                                 @endforeach
+                                                @endif
                                             </div>
                                         @endif
 
@@ -424,10 +428,19 @@
                                                                                                             </select>
                                                                                                             @break
                                                                                                         @case('select')
-                                                                                                            @if($question->options && is_array($question->options) && count($question->options) > 0)
+                                                                                                            @php
+                                                                                                                $selectOptions = $question->options;
+                                                                                                                if (is_string($selectOptions)) {
+                                                                                                                    $selectOptions = json_decode($selectOptions, true) ?? [];
+                                                                                                                }
+                                                                                                                if (!is_array($selectOptions)) {
+                                                                                                                    $selectOptions = [];
+                                                                                                                }
+                                                                                                            @endphp
+                                                                                                            @if(!empty($selectOptions))
                                                                                                                 <select name="answers[{{ $question->id }}][answer]" class="form-select">
                                                                                                                     <option value="">-- Select --</option>
-                                                                                                                    @foreach($question->options as $option)
+                                                                                                                    @foreach($selectOptions as $option)
                                                                                                                         <option value="{{ $option }}" {{ old('answers.' . $question->id . '.answer', $existingValue) == $option ? 'selected' : '' }}>{{ $option }}</option>
                                                                                                                     @endforeach
                                                                                                                 </select>
@@ -566,7 +579,12 @@ foreach($attachedReviewTypes as $reviewType) {
         // Always show the saved table if available, otherwise fall back to default
         $tableToShow = [];
         if ($existingResponse && $existingResponse->answer) {
-            $tableToShow = is_array($existingResponse->answer) ? $existingResponse->answer : json_decode($existingResponse->answer, true);
+            $decoded = is_array($existingResponse->answer) ? $existingResponse->answer : json_decode($existingResponse->answer, true);
+            if (is_array($decoded) && isset($decoded['type']) && $decoded['type'] === 'table' && isset($decoded['value'])) {
+                $tableToShow = $decoded['value'];
+            } else {
+                $tableToShow = $decoded;
+            }
         } else {
             $tableToShow = $rows;
         }
@@ -605,6 +623,7 @@ foreach($attachedReviewTypes as $reviewType) {
                                 <tbody>
                                 @if(is_array($tableToShow) && count($tableToShow))
                                     @foreach($tableToShow as $r => $row)
+                                        @if(is_array($row))
                                         <tr>
                                             @foreach($row as $c => $cell)
                                                 @if($r < $headerRows)
@@ -650,6 +669,7 @@ foreach($attachedReviewTypes as $reviewType) {
                                                 @endfor
                                             @endif
                                         </tr>
+                                        @endif
                                     @endforeach
                                 @else
                                     <tr>

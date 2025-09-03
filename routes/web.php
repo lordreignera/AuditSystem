@@ -7,7 +7,14 @@ use App\Http\Controllers\Admin\ExcelImportExportController;
 /*
 |--------------------------------------------------------------------------
 | Web Routes
-|--------------------------------------------------------------------------
+|--------------------------------------------       // Route::get('audits/{audit}/import-form/{reviewTypeId}', [\App\Http\Controllers\Admin\ExcelImportExportController::class, 'showImportForm'])
+           // ->name('admin.audits.show-import-form');
+       // Route::post('audits/{audit}/import-excel/{reviewTypeId}', [\App\Http\Controllers\Admin\ExcelImportExportController::class, 'importExcel'])
+           // ->name('admin.audits.import-excel');
+           
+       // Debug route for template structure
+       Route::get('audits/{audit}/debug-template/{reviewType}', [\App\Http\Controllers\Admin\ExcelImportExportController::class, 'debugTemplateStructure'])
+           ->name('admin.audits.debug-template');--------------------------
 |
 | Here is where you can register web routes for your application. These
 | routes are loaded by the RouteServiceProvider and all of them will
