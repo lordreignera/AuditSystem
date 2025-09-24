@@ -9,6 +9,8 @@ use App\Models\ReviewType;
 use App\Models\AuditReviewTypeAttachment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use PhpOffice\PhpWord\PhpWord;
+use PhpOffice\PhpWord\IOFactory;
 
 class ReportController extends Controller
 {
@@ -50,7 +52,7 @@ class ReportController extends Controller
     }
 
     /**
-     * Generate AI-powered report
+     * Generate AI-powered report with enhanced data collection
      */
     public function generateAiReport(Request $request, Audit $audit)
     {
@@ -75,11 +77,28 @@ class ReportController extends Controller
                 'include_recommendations' => $includeRecommendations
             ]);
 
-            // Collect audit data
+            // Collect comprehensive audit data using new method
             $auditData = $this->collectAuditData($audit, $request->selected_locations ?? []);
             
+            // Log what data we collected for debugging
+            \Log::info('AI Report Data Collection', [
+                'audit_id' => $audit->id,
+                'audit_name' => $audit->name,
+                'review_types_count' => count($auditData['review_types_data'] ?? []),
+                'total_responses' => $auditData['total_responses'] ?? 0,
+                'total_questions' => $auditData['total_questions'] ?? 0,
+                'selected_locations' => $request->selected_locations ?? 'all'
+            ]);
+            
+            // Prepare AI request options
+            $options = [
+                'report_type' => $request->get('report_type'),
+                'include_table_analysis' => $includeTables,
+                'include_recommendations' => $includeRecommendations,
+            ];
+            
             // Generate AI report
-            $aiReport = $this->callDeepSeekAI($auditData, $request->all());
+            $aiReport = $this->callDeepSeekAI($auditData, $options);
             
             // Save the generated report
             $reportId = $this->saveGeneratedReport($audit, $aiReport, $request->all());
@@ -88,13 +107,94 @@ class ReportController extends Controller
                 'success' => true,
                 'report_id' => $reportId,
                 'report_content' => $aiReport,
-                'message' => 'Report generated successfully'
+                'message' => 'Report generated successfully',
+                'data_summary' => [
+                    'review_types_analyzed' => count($auditData['review_types_data'] ?? []),
+                    'total_responses_analyzed' => $auditData['total_responses'] ?? 0,
+                    'total_questions_analyzed' => $auditData['total_questions'] ?? 0,
+                ]
             ]);
 
         } catch (\Exception $e) {
+            \Log::error('AI Report Generation Failed', [
+                'audit_id' => $audit->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to generate report: ' . $e->getMessage()
+                'message' => 'Failed to generate report: ' . $e->getMessage(),
+                'debug_info' => [
+                    'audit_id' => $audit->id,
+                    'audit_name' => $audit->name,
+                    'error_type' => get_class($e)
+                ]
+            ], 500);
+        }
+    }
+
+    /**
+     * Debug endpoint to check what data is being collected
+     */
+    public function debugAuditData(Audit $audit)
+    {
+        try {
+            // Collect all audit data using the enhanced method
+            $auditData = $this->collectAuditData($audit, []);
+            
+            // Get raw database counts for comparison
+            $rawCounts = [
+                'attachments_in_db' => AuditReviewTypeAttachment::where('audit_id', $audit->id)->count(),
+                'responses_in_db' => Response::where('audit_id', $audit->id)->count(),
+                'review_types_via_attachments' => AuditReviewTypeAttachment::where('audit_id', $audit->id)
+                    ->distinct('review_type_id')->count(),
+            ];
+            
+            return response()->json([
+                'success' => true,
+                'audit_info' => $auditData['audit_info'],
+                'summary' => [
+                    'total_review_types' => count($auditData['review_types_data']),
+                    'total_responses' => $auditData['total_responses'],
+                    'total_questions' => $auditData['total_questions'],
+                ],
+                'raw_database_counts' => $rawCounts,
+                'review_types_preview' => array_map(function($rt) {
+                    return [
+                        'name' => $rt['review_type_name'],
+                        'locations_count' => count($rt['locations']),
+                        'templates_count' => count($rt['templates'] ?? []),
+                        'templates_preview' => array_slice(array_map(function($template) {
+                            return $template['template_name'] . ' (' . $template['total_sections'] . ' sections, ' . $template['total_questions'] . ' questions)';
+                        }, $rt['templates'] ?? []), 0, 3),
+                        'first_location_preview' => !empty($rt['locations']) ? [
+                            'name' => $rt['locations'][0]['location_name'],
+                            'completion_rate' => $rt['locations'][0]['response_summary']['completion_percentage'] . '%',
+                            'sections_count' => count($rt['locations'][0]['sections_data']),
+                            'responses_found' => $rt['locations'][0]['response_summary']['total_responses'],
+                            'first_section_preview' => !empty($rt['locations'][0]['sections_data']) ? [
+                                'name' => $rt['locations'][0]['sections_data'][0]['section_name'],
+                                'template_name' => $rt['locations'][0]['sections_data'][0]['template_name'] ?? 'Unknown Template',
+                                'questions_count' => count($rt['locations'][0]['sections_data'][0]['questions_data']),
+                                'sample_question' => !empty($rt['locations'][0]['sections_data'][0]['questions_data']) ? 
+                                    substr($rt['locations'][0]['sections_data'][0]['questions_data'][0]['question_text'], 0, 100) . '...' : 'No questions',
+                                'sample_answer' => !empty($rt['locations'][0]['sections_data'][0]['questions_data']) && 
+                                    $rt['locations'][0]['sections_data'][0]['questions_data'][0]['has_response'] ? 
+                                    substr($rt['locations'][0]['sections_data'][0]['questions_data'][0]['formatted_answer'], 0, 100) . '...' : 'No answer'
+                            ] : 'No sections'
+                        ] : 'No locations'
+                    ];
+                }, $auditData['review_types_data']),
+                'data_collection_method' => 'Enhanced method using AuditReviewTypeAttachment directly'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'line' => $e->getLine(),
+                'file' => $e->getFile()
             ], 500);
         }
     }
@@ -208,149 +308,303 @@ class ReportController extends Controller
     }
 
     /**
-     * Collect comprehensive audit data for AI processing
+     * Collect comprehensive audit data for AI processing with detailed template structure
      */
     private function collectAuditData(Audit $audit, array $selectedLocations = [])
     {
-        $data = [
+        $auditData = [
             'audit_info' => [
                 'name' => $audit->name,
                 'description' => $audit->description,
                 'country' => $audit->country->name,
                 'start_date' => $audit->start_date->format('Y-m-d'),
                 'end_date' => $audit->end_date ? $audit->end_date->format('Y-m-d') : null,
-                'review_code' => $audit->review_code
+                'review_code' => $audit->review_code,
+                'status' => $audit->status,
             ],
-            'review_types' => []
+            'review_types_data' => [],
+            'total_responses' => 0,
+            'total_questions' => 0,
         ];
 
-        $attachments = AuditReviewTypeAttachment::where('audit_id', $audit->id)
-            ->with(['reviewType.templates.sections.questions', 'responses.question'])
-            ->get();
-
-        // Filter by selected locations if specified
+        // Get attachments (locations) directly since audit->reviewTypes might be empty
+        $attachmentsQuery = AuditReviewTypeAttachment::where('audit_id', $audit->id)
+            ->with(['reviewType.templates.sections.questions', 'responses.question']);
+            
         if (!empty($selectedLocations)) {
-            $attachments = $attachments->whereIn('id', $selectedLocations);
+            $attachmentsQuery->whereIn('id', $selectedLocations);
         }
+        
+        $attachments = $attachmentsQuery->get();
 
-        foreach ($attachments as $attachment) {
-            // Skip invalid attachments
-            if (!$attachment || !$attachment->reviewType) {
+        // Group attachments by review type
+        $reviewTypeGroups = $attachments->groupBy('review_type_id');
+
+        foreach ($reviewTypeGroups as $reviewTypeId => $typeAttachments) {
+            $firstAttachment = $typeAttachments->first();
+            $reviewType = $firstAttachment->reviewType;
+            
+            if (!$reviewType) {
+                \Log::warning("Attachment {$firstAttachment->id} has no review type");
                 continue;
             }
 
-            try {
-                $reviewTypeData = [
-                    'name' => $attachment->reviewType->name,
-                    'location' => $attachment->getContextualLocationName(),
-                    'is_master' => $attachment->is_master,
-                    'sections' => []
+            $reviewTypeData = [
+                'review_type_name' => $reviewType->name,
+                'review_type_description' => $reviewType->description ?? '',
+                'locations' => [],
+                'templates' => [],
+            ];
+
+            // Process each location (attachment) for this review type
+            foreach ($typeAttachments as $attachment) {
+                $locationData = [
+                    'location_id' => $attachment->id,
+                    'location_name' => $attachment->getContextualLocationName(),
+                    'is_master' => $attachment->isMaster(),
+                    'duplicate_number' => $attachment->duplicate_number,
+                    'sections_data' => [],
+                    'response_summary' => [
+                        'total_responses' => 0,
+                        'answered_questions' => 0,
+                        'unanswered_questions' => 0,
+                        'completion_percentage' => 0
+                    ]
                 ];
 
-                // Get responses for this attachment
-                $responses = $attachment->responses->keyBy('question_id');
-
-                foreach ($attachment->reviewType->templates as $template) {
-                    foreach ($template->sections as $section) {
-                        $sectionData = [
-                            'name' => $section->name,
-                            'description' => $section->description,
-                            'questions' => []
-                        ];
-
-                        foreach ($section->questions as $question) {
-                            $response = $responses->get($question->id);
-                            
-                            $questionData = [
-                                'question_text' => $question->question_text,
-                                'description' => $question->description,
-                                'response_type' => $question->response_type,
-                                'is_required' => $question->is_required,
-                                'answer' => null,
-                                'audit_note' => null
+                // Get all templates for this review type (not just the first one)
+                $templates = $reviewType->templates()->with('sections.questions')->get();
+                
+                if ($templates->count() > 0) {
+                    // Process each template
+                    foreach ($templates as $template) {
+                        // Process each section in the template
+                        foreach ($template->sections()->with('questions')->orderBy('order')->get() as $section) {
+                            $sectionData = [
+                                'section_name' => $section->name,
+                                'section_description' => $section->description ?? '',
+                                'section_order' => $section->order,
+                                'template_name' => $template->name,
+                                'questions_data' => []
                             ];
 
-                            if ($response) {
-                                $questionData['answer'] = $this->formatResponseAnswer($response, $question);
-                                $questionData['audit_note'] = $response->audit_note;
+                            // Process each question in the section
+                            foreach ($section->questions()->orderBy('order')->get() as $question) {
+                                // Get response for this question and location
+                                $response = Response::where('audit_id', $audit->id)
+                                    ->where('attachment_id', $attachment->id)
+                                    ->where('question_id', $question->id)
+                                    ->first();
+
+                                $questionData = [
+                                    'question_id' => $question->id,
+                                    'question_text' => $question->question_text,
+                                    'response_type' => $question->response_type,
+                                    'is_required' => $question->is_required,
+                                    'order' => $question->order,
+                                    'template_name' => $template->name,
+                                    'response' => null,
+                                    'audit_note' => null,
+                                    'has_response' => false,
+                                    'formatted_answer' => null
+                                ];
+
+                                if ($response) {
+                                    $questionData['response'] = $response->answer;
+                                    $questionData['audit_note'] = $response->audit_note;
+                                    $questionData['has_response'] = true;
+                                    $questionData['formatted_answer'] = $this->formatResponseForAI($question, $response);
+                                    
+                                    $locationData['response_summary']['total_responses']++;
+                                    $locationData['response_summary']['answered_questions']++;
+                                } else {
+                                    $locationData['response_summary']['unanswered_questions']++;
+                                }
+
+                                $sectionData['questions_data'][] = $questionData;
+                                $auditData['total_questions']++;
                             }
 
-                            $sectionData['questions'][] = $questionData;
+                            // Only add section if it has questions
+                            if (!empty($sectionData['questions_data'])) {
+                                $locationData['sections_data'][] = $sectionData;
+                            }
                         }
+                    }
 
-                        $reviewTypeData['sections'][] = $sectionData;
+                    // Calculate completion percentage
+                    $totalQuestions = $locationData['response_summary']['answered_questions'] + $locationData['response_summary']['unanswered_questions'];
+                    if ($totalQuestions > 0) {
+                        $locationData['response_summary']['completion_percentage'] = round(
+                            ($locationData['response_summary']['answered_questions'] / $totalQuestions) * 100, 1
+                        );
+                    }
+
+                    $auditData['total_responses'] += $locationData['response_summary']['total_responses'];
+                } else {
+                    // If no template, try to collect responses directly from the attachment
+                    $responses = $attachment->responses()->with('question.section')->get();
+                    $locationData['response_summary']['total_responses'] = $responses->count();
+                    $auditData['total_responses'] += $responses->count();
+                    
+                    // Group responses by section
+                    $responsesBySection = $responses->groupBy(function($response) {
+                        return $response->question->section ? $response->question->section->name : 'No Section';
+                    });
+                    
+                    foreach ($responsesBySection as $sectionName => $sectionResponses) {
+                        $sectionData = [
+                            'section_name' => $sectionName,
+                            'section_description' => '',
+                            'section_order' => 0,
+                            'questions_data' => []
+                        ];
+                        
+                        foreach ($sectionResponses as $response) {
+                            $question = $response->question;
+                            if ($question) {
+                                $questionData = [
+                                    'question_id' => $question->id,
+                                    'question_text' => $question->question_text,
+                                    'response_type' => $question->response_type,
+                                    'is_required' => $question->is_required,
+                                    'order' => $question->order,
+                                    'response' => $response->answer,
+                                    'audit_note' => $response->audit_note,
+                                    'has_response' => true,
+                                    'formatted_answer' => $this->formatResponseForAI($question, $response)
+                                ];
+                                
+                                $sectionData['questions_data'][] = $questionData;
+                                $auditData['total_questions']++;
+                            }
+                        }
+                        
+                        $locationData['sections_data'][] = $sectionData;
                     }
                 }
 
-                $data['review_types'][] = $reviewTypeData;
-            } catch (\Exception $e) {
-                // Log error but continue processing other attachments
-                \Log::warning("Error processing attachment {$attachment->id} in collectAuditData: " . $e->getMessage());
+                $reviewTypeData['locations'][] = $locationData;
             }
-        }
 
-        return $data;
-    }
-
-    /**
-     * Format response answer based on question type
-     */
-    private function formatResponseAnswer($response, $question)
-    {
-        if (!$response->answer) {
-            return null;
-        }
-
-        switch ($question->response_type) {
-            case 'table':
-                // Format table data for AI understanding
-                $tableData = is_array($response->answer) ? $response->answer : json_decode($response->answer, true);
-                if (is_array($tableData)) {
-                    return [
-                        'type' => 'table',
-                        'data' => $tableData,
-                        'formatted' => $this->formatTableForAI($tableData)
+            // Add template information for all templates
+            if ($templates && $templates->count() > 0) {
+                foreach ($templates as $template) {
+                    $reviewTypeData['templates'][] = [
+                        'template_name' => $template->name,
+                        'template_description' => $template->description ?? '',
+                        'total_sections' => $template->sections()->count(),
+                        'total_questions' => $template->questions()->count()
                     ];
                 }
-                return $response->answer;
+            }
 
-            case 'yes_no':
-                return [
-                    'type' => 'yes_no',
-                    'value' => $response->answer,
-                    'formatted' => "Answer: " . $response->answer
-                ];
-
-            case 'textarea':
-                return [
-                    'type' => 'textarea',
-                    'value' => $response->answer,
-                    'formatted' => "Response: " . $response->answer
-                ];
-
-            default:
-                return [
-                    'type' => 'text',
-                    'value' => $response->answer,
-                    'formatted' => "Answer: " . $response->answer
-                ];
+            $auditData['review_types_data'][] = $reviewTypeData;
         }
+
+        // Log what we found for debugging
+        \Log::info('Data Collection Results', [
+            'audit_id' => $audit->id,
+            'attachments_found' => $attachments->count(),
+            'review_type_groups' => count($reviewTypeGroups),
+            'total_responses_collected' => $auditData['total_responses'],
+            'total_questions_found' => $auditData['total_questions']
+        ]);
+
+        return $auditData;
     }
 
     /**
-     * Format table data for AI processing
+     * Format response answer for AI consumption
      */
-    private function formatTableForAI($tableData)
+    private function formatResponseForAI($question, $response)
     {
-        if (!is_array($tableData) || empty($tableData)) {
-            return "Empty table";
+        $answer = $response->answer;
+        $auditNote = $response->audit_note;
+
+        // Handle different response types
+        switch ($question->response_type) {
+            case 'table':
+                return $this->formatTableResponseForAI($question, $answer, $auditNote);
+            
+            case 'yes_no':
+                $formatted = is_array($answer) ? $answer[0] ?? 'No response' : (string) $answer;
+                break;
+                
+            case 'select':
+                $formatted = is_array($answer) ? $answer[0] ?? 'No selection' : (string) $answer;
+                break;
+                
+            case 'number':
+                $formatted = is_array($answer) ? $answer[0] ?? '0' : (string) $answer;
+                break;
+                
+            case 'date':
+                $formatted = is_array($answer) ? $answer[0] ?? 'No date' : (string) $answer;
+                break;
+                
+            case 'text':
+            case 'textarea':
+            default:
+                $formatted = is_array($answer) ? $answer[0] ?? 'No response' : (string) $answer;
+                break;
         }
 
-        $formatted = "Table Data:\n";
-        foreach ($tableData as $rowIndex => $row) {
-            if (is_array($row)) {
-                $formatted .= "Row " . ($rowIndex + 1) . ": " . implode(" | ", $row) . "\n";
+        // Add audit note if present
+        if (!empty($auditNote)) {
+            $formatted .= " [Audit Note: " . $auditNote . "]";
+        }
+
+        return $formatted;
+    }
+
+    /**
+     * Format table response for AI analysis
+     */
+    private function formatTableResponseForAI($question, $answer, $auditNote)
+    {
+        if (!is_array($answer) || empty($answer)) {
+            $note = !empty($auditNote) ? " [Audit Note: " . $auditNote . "]" : "";
+            return "No table data provided" . $note;
+        }
+
+        $formatted = "\nTable Data:\n";
+        
+        // Get table structure from question
+        $tableStructure = $question->parseTableStructure();
+        
+        if ($tableStructure && !empty($tableStructure[0])) {
+            // Use headers from table structure
+            $headers = $tableStructure[0];
+            $formatted .= "Headers: " . implode(' | ', $headers) . "\n";
+            
+            // Format each row of data
+            $rowIndex = 1;
+            foreach ($answer as $row) {
+                if (is_array($row) && !empty(array_filter($row))) {
+                    $formatted .= "Row {$rowIndex}: ";
+                    foreach ($row as $cellIndex => $cellValue) {
+                        $header = $headers[$cellIndex] ?? "Col" . ($cellIndex + 1);
+                        if (!empty($cellValue)) {
+                            $formatted .= "{$header}: {$cellValue} | ";
+                        }
+                    }
+                    $formatted = rtrim($formatted, ' | ') . "\n";
+                    $rowIndex++;
+                }
             }
+        } else {
+            // Fallback formatting
+            foreach ($answer as $rowIndex => $row) {
+                if (is_array($row) && !empty(array_filter($row))) {
+                    $formatted .= "Row " . ($rowIndex + 1) . ": " . implode(' | ', array_filter($row)) . "\n";
+                }
+            }
+        }
+
+        // Add audit note if present
+        if (!empty($auditNote)) {
+            $formatted .= "[Audit Note: " . $auditNote . "]\n";
         }
 
         return $formatted;
@@ -375,13 +629,14 @@ class ReportController extends Controller
 
         try {
             $verifySSL = config('services.deepseek.verify_ssl', false);
-            
+
+            // Increase timeout to 300 seconds (5 minutes)
             $response = Http::withHeaders([
                 'Authorization' => 'Bearer ' . $apiKey,
                 'Content-Type' => 'application/json'
             ])
             ->withOptions([
-                'verify' => $verifySSL, // Use configuration setting
+                'verify' => $verifySSL,
                 'timeout' => 120
             ])
             ->timeout(120)
@@ -431,79 +686,213 @@ class ReportController extends Controller
     }
 
     /**
-     * Build the AI prompt based on audit data and options
+     * Build comprehensive AI prompt based on detailed audit data and options
      */
     private function buildPromptForAI($auditData, $options)
     {
         $reportType = $options['report_type'];
         $includeRecommendations = $options['include_recommendations'] ?? false;
+        $includeTableAnalysis = $options['include_table_analysis'] ?? false;
         
-        $prompt = "Generate a {$reportType} report for the following audit:\n\n";
+        $prompt = "Generate a comprehensive {$reportType} report for the following healthcare audit:\n\n";
         
         // Add audit basic info
         $prompt .= "AUDIT INFORMATION:\n";
         $prompt .= "Name: {$auditData['audit_info']['name']}\n";
+        $prompt .= "Description: {$auditData['audit_info']['description']}\n";
         $prompt .= "Country: {$auditData['audit_info']['country']}\n";
         $prompt .= "Start Date: {$auditData['audit_info']['start_date']}\n";
         if ($auditData['audit_info']['end_date']) {
             $prompt .= "End Date: {$auditData['audit_info']['end_date']}\n";
         }
-        $prompt .= "Review Code: {$auditData['audit_info']['review_code']}\n\n";
+        $prompt .= "Review Code: {$auditData['audit_info']['review_code']}\n";
+        $prompt .= "Status: {$auditData['audit_info']['status']}\n";
+        if (!empty($auditData['audit_info']['participants'])) {
+            $prompt .= "Participants: " . implode(', ', $auditData['audit_info']['participants']) . "\n";
+        }
+        $prompt .= "Total Questions: {$auditData['total_questions']}\n";
+        $prompt .= "Total Responses: {$auditData['total_responses']}\n\n";
 
-        // Add review types and responses
-        $prompt .= "AUDIT DATA:\n";
-        foreach ($auditData['review_types'] as $reviewType) {
-            $prompt .= "\nREVIEW TYPE: {$reviewType['name']}\n";
-            $prompt .= "Location: {$reviewType['location']}\n";
-            $prompt .= "Type: " . ($reviewType['is_master'] ? 'Master' : 'Duplicate') . "\n";
+        // Process each review type with detailed structure
+        $prompt .= "DETAILED AUDIT DATA:\n\n";
+        foreach ($auditData['review_types_data'] as $reviewTypeIndex => $reviewType) {
+            $prompt .= "═══ REVIEW TYPE " . ($reviewTypeIndex + 1) . ": {$reviewType['review_type_name']} ═══\n";
+            $prompt .= "Description: {$reviewType['review_type_description']}\n";
+            
+            // Add template summary
+            if (!empty($reviewType['templates'])) {
+                $prompt .= "Templates Available: " . count($reviewType['templates']) . "\n";
+                foreach ($reviewType['templates'] as $template) {
+                    $prompt .= "  - {$template['template_name']}: {$template['total_sections']} sections, {$template['total_questions']} questions\n";
+                }
+                $prompt .= "\n";
+            }
 
-            foreach ($reviewType['sections'] as $section) {
-                $prompt .= "\nSECTION: {$section['name']}\n";
-                if ($section['description']) {
-                    $prompt .= "Description: {$section['description']}\n";
+            // Process each location
+            foreach ($reviewType['locations'] as $locationIndex => $location) {
+                $prompt .= "--- LOCATION " . ($locationIndex + 1) . ": {$location['location_name']} ---\n";
+                $prompt .= "Location Type: " . ($location['is_master'] ? 'Master Location' : 'Duplicate Location #' . $location['duplicate_number']) . "\n";
+                $prompt .= "Completion Rate: {$location['response_summary']['completion_percentage']}%\n";
+                $prompt .= "Answered Questions: {$location['response_summary']['answered_questions']}\n";
+                $prompt .= "Unanswered Questions: {$location['response_summary']['unanswered_questions']}\n\n";
+
+                // Group sections by template for better organization
+                $templateSections = [];
+                foreach ($location['sections_data'] as $section) {
+                    $templateName = $section['template_name'] ?? 'Unknown Template';
+                    if (!isset($templateSections[$templateName])) {
+                        $templateSections[$templateName] = [];
+                    }
+                    $templateSections[$templateName][] = $section;
                 }
 
-                foreach ($section['questions'] as $question) {
-                    $prompt .= "\nQ: {$question['question_text']}\n";
-                    if ($question['answer']) {
-                        if (is_array($question['answer']) && isset($question['answer']['formatted'])) {
-                            $prompt .= "A: {$question['answer']['formatted']}\n";
-                        } else {
-                            $prompt .= "A: {$question['answer']}\n";
+                // Process each template's sections
+                foreach ($templateSections as $templateName => $sections) {
+                    // Find template description
+                    $templateObj = null;
+                    if (!empty($reviewType['templates'])) {
+                        foreach ($reviewType['templates'] as $tpl) {
+                            if ($tpl['template_name'] === $templateName) {
+                                $templateObj = $tpl;
+                                break;
+                            }
                         }
-                    } else {
-                        $prompt .= "A: [No response provided]\n";
                     }
-                    
-                    if ($question['audit_note']) {
-                        $prompt .= "Note: {$question['audit_note']}\n";
+                    $prompt .= "  TEMPLATE: {$templateName}\n";
+                    if ($templateObj && !empty($templateObj['template_description'])) {
+                        $prompt .= "  Description: {$templateObj['template_description']}\n";
+                    }
+
+                    // Check if any question in any section is tabular
+                    $isTabular = false;
+                    foreach ($sections as $section) {
+                        foreach ($section['questions_data'] as $question) {
+                            if (($question['response_type'] ?? '') === 'table') {
+                                $isTabular = true;
+                                break 2;
+                            }
+                        }
+                    }
+
+                    if ($isTabular) {
+                        // Check if sections are present or if questions are directly under template
+                        $hasSections = !empty($sections) && !empty($sections[0]['section_name']);
+                        $prompt .= "  TABULAR RESPONSES:\n";
+                        if ($hasSections) {
+                            $prompt .= "  | Section | Question | Response |\n";
+                            $prompt .= "  |---------|----------|----------|\n";
+                            foreach ($sections as $section) {
+                                $sectionName = $section['section_name'] ?? '';
+                                foreach ($section['questions_data'] as $question) {
+                                    if (($question['response_type'] ?? '') === 'table') {
+                                        $qText = str_replace(["\n", "|"], [" ", " "], $question['question_text']);
+                                        $resp = str_replace(["\n", "|"], [" ", " "], $question['response_value'] ?? '[No Response]');
+                                        $prompt .= "  | $sectionName | $qText | $resp |\n";
+                                    }
+                                }
+                            }
+                        } else {
+                            // No sections, just questions under template
+                            $prompt .= "  | Question | Response |\n";
+                            $prompt .= "  |----------|----------|\n";
+                            foreach ($sections as $section) {
+                                foreach ($section['questions_data'] as $question) {
+                                    if (($question['response_type'] ?? '') === 'table') {
+                                        $qText = str_replace(["\n", "|"], [" ", " "], $question['question_text']);
+                                        $resp = str_replace(["\n", "|"], [" ", " "], $question['response_value'] ?? '[No Response]');
+                                        $prompt .= "  | $qText | $resp |\n";
+                                    }
+                                }
+                            }
+                        }
+                        $prompt .= "\n  [Template Summary: Please summarize the tabular responses and findings for this template in this location.]\n\n";
+                    } else {
+                        // Standard section/question listing
+                        foreach ($sections as $section) {
+                            $prompt .= "    SECTION: {$section['section_name']}\n";
+                            if (!empty($section['section_description'])) {
+                                $prompt .= "    Description: {$section['section_description']}\n";
+                            }
+                            $prompt .= "    Questions and Responses:\n";
+                            foreach ($section['questions_data'] as $question) {
+                                $prompt .= "      Q{$question['order']}: {$question['question_text']}\n";
+                                $resp = isset($question['response_value']) && $question['response_value'] !== null && $question['response_value'] !== '' ? $question['response_value'] : '[No Response]';
+                                $prompt .= "      Response: $resp\n";
+                            }
+                            $prompt .= "    [Section Summary: Please summarize the above responses for this section.]\n\n";
+                        }
+                        $prompt .= "\n  [Template Summary: Please summarize the responses and findings for this template in this location.]\n\n";
                     }
                 }
+                $prompt .= "\n";
             }
         }
 
         // Add specific instructions based on report type
-        $prompt .= "\n\nREPORT REQUIREMENTS:\n";
+        $prompt .= "\nREPORT REQUIREMENTS:\n";
         switch ($reportType) {
             case 'executive_summary':
-                $prompt .= "Create an executive summary focusing on key findings, major issues, and high-level insights.";
+                $prompt .= "Create an executive summary focusing on:\n";
+                $prompt .= "- Key findings and critical issues\n";
+                $prompt .= "- Overall compliance status\n";
+                $prompt .= "- Major gaps and strengths\n";
+                $prompt .= "- High-level insights and trends\n";
+                $prompt .= "- Strategic recommendations\n";
                 break;
+                
             case 'detailed_analysis':
-                $prompt .= "Provide a detailed analysis of all responses, identifying patterns, trends, and specific areas of concern.";
+                $prompt .= "Provide a detailed analysis including:\n";
+                $prompt .= "- Section-by-section analysis\n";
+                $prompt .= "- Question-by-question findings where significant\n";
+                $prompt .= "- Pattern identification across locations\n";
+                $prompt .= "- Data quality assessment\n";
+                $prompt .= "- Specific compliance issues\n";
+                $prompt .= "- Detailed recommendations for each major finding\n";
                 break;
+                
             case 'compliance_check':
-                $prompt .= "Focus on compliance-related findings, highlighting areas where standards are met or not met.";
+                $prompt .= "Focus on compliance analysis including:\n";
+                $prompt .= "- Standards and regulations adherence\n";
+                $prompt .= "- Non-compliance areas and severity\n";
+                $prompt .= "- Risk assessment for each non-compliance\n";
+                $prompt .= "- Required corrective actions\n";
+                $prompt .= "- Timeline for compliance achievement\n";
                 break;
+                
             case 'comparative_analysis':
-                $prompt .= "Compare responses across different locations (master vs duplicates) and identify discrepancies or consistencies.";
+                $prompt .= "Compare responses across locations focusing on:\n";
+                $prompt .= "- Variations between master and duplicate locations\n";
+                $prompt .= "- Consistency in implementation\n";
+                $prompt .= "- Best performing locations and their practices\n";
+                $prompt .= "- Areas needing standardization\n";
+                $prompt .= "- Location-specific recommendations\n";
                 break;
+        }
+
+        if ($includeTableAnalysis) {
+            $prompt .= "\nFor table data:\n";
+            $prompt .= "- Analyze numerical trends and patterns\n";
+            $prompt .= "- Identify data quality issues\n";
+            $prompt .= "- Calculate key metrics where appropriate\n";
+            $prompt .= "- Highlight significant variances\n";
         }
 
         if ($includeRecommendations) {
-            $prompt .= " Include specific recommendations for improvement based on the findings.";
+            $prompt .= "\nInclude specific recommendations:\n";
+            $prompt .= "- Immediate actions required\n";
+            $prompt .= "- Short-term improvements (3-6 months)\n";
+            $prompt .= "- Long-term strategic changes (6-12 months)\n";
+            $prompt .= "- Resource requirements\n";
+            $prompt .= "- Success metrics\n";
         }
 
-        $prompt .= "\n\nFormat the report professionally with clear headings, bullet points where appropriate, and actionable insights.";
+        $prompt .= "\nFormat the report professionally with:\n";
+        $prompt .= "- Clear headings and subheadings\n";
+        $prompt .= "- Executive summary at the beginning\n";
+        $prompt .= "- Bullet points for key findings\n";
+        $prompt .= "- Tables or lists where appropriate\n";
+        $prompt .= "- Actionable insights and recommendations\n";
+        $prompt .= "- Professional healthcare audit language\n";
 
         return $prompt;
     }
@@ -692,9 +1081,9 @@ class ReportController extends Controller
         return $assessment;
     }
 
-    /**
-     * Save the generated report
-     */
+
+    // Save the generated report
+    
     private function saveGeneratedReport($audit, $reportContent, $options)
     {
         // You can implement report saving logic here
@@ -713,5 +1102,78 @@ class ReportController extends Controller
         session(['generated_report_' . $audit->id => $reportData]);
 
         return 'report_' . $audit->id . '_' . time();
+    }
+    /**
+     * Export the AI-generated report as a PDF using Dompdf
+     */
+    public function exportAsPDF(Request $request, Audit $audit)
+    {
+        try {
+            // Ensure Dompdf is available
+            if (!class_exists('Dompdf\\Dompdf')) {
+                \Log::error('PDF export failed: Dompdf not installed');
+                abort(500, 'PDF export library not installed.');
+            }
+
+            // Prepare report content
+            $reportContent = $request->report_content;
+            $reportType = ucwords(str_replace('_', ' ', $request->report_type));
+            $countryName = $audit->country ? $audit->country->name : 'Unknown';
+            // Fix: Support both arrays and collections for participants
+            if (!empty($audit->participants)) {
+                if (is_array($audit->participants)) {
+                    $participants = implode(', ', array_map(function($p) {
+                        return is_object($p) ? $p->name : (isset($p['name']) ? $p['name'] : '');
+                    }, $audit->participants));
+                } else {
+                    $participants = $audit->participants->pluck('name')->join(', ');
+                }
+            } else {
+                $participants = 'N/A';
+            }
+
+            // Log incoming request for debugging
+            \Log::info('PDF Export Request', [
+                'audit_id' => $audit->id,
+                'report_type' => $reportType,
+                'country' => $countryName,
+                'participants' => $participants,
+                'report_content_length' => strlen($reportContent),
+            ]);
+
+            // Build HTML for PDF
+            $html = view('admin.reports.pdf', [
+                'audit' => $audit,
+                'countryName' => $countryName,
+                'reportType' => $reportType,
+                'participants' => $participants,
+                'reportContent' => $reportContent,
+                'generatedAt' => now()->format('M j, Y H:i:s'),
+            ])->render();
+
+            // Log HTML length for debugging
+            \Log::info('PDF Export HTML Length', ['length' => strlen($html)]);
+
+            // Generate PDF
+            $dompdf = new \Dompdf\Dompdf();
+            $dompdf->loadHtml($html);
+            $dompdf->setPaper('A4', 'portrait');
+            $dompdf->render();
+
+            $filename = 'Audit_Report_' . str_replace([' ', '/', '\\'], '_', $audit->name) . '_' . now()->format('Y-m-d_H-i-s') . '.pdf';
+
+            \Log::info('PDF Export Success', ['filename' => $filename]);
+
+            return response($dompdf->output())
+                ->header('Content-Type', 'application/pdf')
+                ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
+        } catch (\Exception $e) {
+            \Log::error('PDF export failed', [
+                'audit_id' => $audit->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            abort(500, 'Failed to generate PDF: ' . $e->getMessage());
+        }
     }
 }

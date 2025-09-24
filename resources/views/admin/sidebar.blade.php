@@ -150,6 +150,7 @@
         <ul class="nav flex-column sub-menu">
           @can('view reports')
           <li class="nav-item"><a class="nav-link" href="{{ route('admin.reports.index') }}"><i class="mdi mdi-file-chart"></i> AI-Powered Reports</a></li>
+          <li class="nav-item"><a class="nav-link" href="{{ route('admin.reports.index') }}"><i class="mdi mdi-robot"></i> AI Chat Assistant</a></li>
           <li class="nav-item"><a class="nav-link" href="{{ url('sales_report') }}">Audit Report</a></li>
           <li class="nav-item"><a class="nav-link" href="{{ url('monthly_report') }}">Monthly Audit Report</a></li>
           @endcan

@@ -84,6 +84,225 @@
         color: #333333 !important;
         background-color: #ffffff !important;
     }
+
+    /* Resizable column styles */
+    .resizable-th {
+        position: relative;
+        overflow: hidden;
+        padding-right: 20px !important;
+        min-width: 100px !important; /* Increased minimum width */
+    }
+
+    .column-resizer {
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: 12px; /* Increased width for easier grabbing */
+        cursor: col-resize;
+        background: transparent;
+        border-right: 3px solid #dee2e6;
+        transition: border-color 0.2s;
+        z-index: 10;
+    }
+
+    .column-resizer:hover {
+        border-right-color: #007bff;
+        background: rgba(0, 123, 255, 0.15);
+        width: 15px; /* Wider on hover for easier targeting */
+    }
+
+    .column-resizer.resizing {
+        border-right-color: #007bff;
+        background: rgba(0, 123, 255, 0.25);
+        width: 15px;
+    }
+
+    .resizable-table th input,
+    .resizable-table td input {
+        width: 100%;
+        border: none;
+        padding: 8px;
+        background: transparent;
+        margin: 0;
+        min-width: 0; /* Allow inputs to shrink */
+        box-sizing: border-box;
+    }
+
+    .resizable-table .header-input {
+        font-weight: bold;
+        text-align: center;
+        color: #495057;
+        background-color: transparent;
+    }
+
+    .resizable-table .header-input:focus {
+        background-color: rgba(255, 243, 205, 0.5);
+        outline: 2px solid #007bff;
+        outline-offset: -2px;
+    }
+
+    /* Ensure proper table layout with horizontal scroll */
+    .table-responsive {
+        overflow-x: auto !important;
+        overflow-y: visible;
+        max-width: 100%;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        scrollbar-width: thin;
+    }
+
+    .resizable-table {
+        table-layout: fixed;
+        width: auto !important; /* Let table width be sum of column widths */
+        min-width: 100%; /* Minimum width to fill container when columns are narrow */
+        border-collapse: separate;
+        border-spacing: 0;
+        margin-bottom: 0;
+        white-space: nowrap; /* Prevent text wrapping that affects independent sizing */
+    }
+
+    .resizable-table th,
+    .resizable-table td {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        word-wrap: break-word;
+        position: relative;
+        min-width: 100px !important; /* Enforced minimum width */
+        box-sizing: border-box;
+        white-space: nowrap; /* Keep content on single line for better column independence */
+        vertical-align: top;
+        padding: 8px 12px; /* Better padding for content */
+    }
+
+    /* Enhanced content display for long text */
+    .resizable-table th,
+    .resizable-table td {
+        overflow: visible; /* Allow content to show when column is wide enough */
+    }
+
+    .resizable-table th:hover,
+    .resizable-table td:hover {
+        overflow: visible; /* Show full content on hover */
+        white-space: normal; /* Allow text wrapping on hover for better readability */
+        z-index: 3;
+        position: relative;
+        background-color: rgba(255, 255, 255, 0.95);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        border-radius: 4px;
+        max-width: none !important; /* Remove width constraint on hover */
+    }
+
+    /* Column content wrapper for better text handling */
+    .column-content {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        width: 100%;
+        display: block;
+    }
+
+    /* Better input handling in narrow columns */
+    .resizable-table input[type="text"],
+    .resizable-table input[type="number"],
+    .resizable-table input[type="date"] {
+        font-size: 13px;
+        padding: 6px 4px;
+        border: 1px solid transparent;
+        border-radius: 3px;
+        transition: all 0.2s ease;
+    }
+
+    .resizable-table input:focus {
+        border-color: #007bff;
+        background-color: #fff !important;
+        box-shadow: 0 0 0 1px rgba(0, 123, 255, 0.25);
+        z-index: 5;
+        position: relative;
+    }
+
+    /* Table controls for better UX */
+    .table-controls {
+        margin-bottom: 15px;
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .table-controls .btn {
+        font-size: 0.875rem;
+        padding: 0.375rem 0.75rem;
+    }
+
+    .btn-table-control {
+        background-color: #6c757d;
+        border-color: #6c757d;
+        color: white;
+    }
+
+    .btn-table-control:hover {
+        background-color: #5a6268;
+        border-color: #545b62;
+        color: white;
+    }
+
+    /* Reset columns button */
+    .btn-reset-columns {
+        background-color: #17a2b8;
+        border-color: #17a2b8;
+        color: white;
+        font-size: 0.8rem;
+        padding: 0.25rem 0.5rem;
+    }
+
+    .btn-reset-columns:hover {
+        background-color: #138496;
+        border-color: #117a8b;
+        color: white;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+        .resizable-table th,
+        .resizable-table td {
+            min-width: 80px !important;
+            padding: 4px;
+            font-size: 12px;
+        }
+        
+        .column-resizer {
+            width: 10px;
+        }
+        
+        .column-resizer:hover {
+            width: 12px;
+        }
+        
+        .table-controls {
+            justify-content: center;
+        }
+    }
+
+    /* Scrollbar styling for table */
+    .table-responsive::-webkit-scrollbar {
+        height: 8px;
+    }
+
+    .table-responsive::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 4px;
+    }
+
+    .table-responsive::-webkit-scrollbar-thumb {
+        background: #c1c1c1;
+        border-radius: 4px;
+    }
+
+    .table-responsive::-webkit-scrollbar-thumb:hover {
+        background: #a8a8a8;
+    }
 </style>
 
 <!-- Breadcrumb -->
@@ -608,18 +827,36 @@ foreach($attachedReviewTypes as $reviewType) {
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <form method="POST" action="{{ route('admin.review-types-crud.save-responses', $modalReviewType->id) }}">
+                    <form method="POST" action="{{ route('admin.review-types-crud.save-responses', $modalReviewType->id) }}" onsubmit="saveColumnWidths('editableTable-{{ $modalQuestion->id }}')">
                         @csrf
                         <input type="hidden" name="audit_id" value="{{ $audit->id }}">
                         <input type="hidden" name="attachment_id" value="{{ $selectedAttachmentId }}">
                         <input type="hidden" name="redirect_to" value="{{ url()->current() }}#tableModal-{{ $modalQuestion->id }}">
+                        
+                        <!-- Hidden input to store column widths -->
+                        <input type="hidden" name="answers[{{ $modalQuestion->id }}][column_widths]" id="columnWidths-{{ $modalQuestion->id }}" value="">
+                        
                         <div class="mb-3">
                             <label for="headerRows-{{ $modalQuestion->id }}" class="form-label fw-semibold">Number of Header Rows</label>
                             <input type="number" min="1" class="form-control form-control-sm header-rows-input" name="answers[{{ $modalQuestion->id }}][header_rows]" id="headerRows-{{ $modalQuestion->id }}" value="{{ $headerRows }}">
                             <small class="text-muted">Set how many rows at the top are table headers.</small>
                         </div>
                         <div class="table-responsive" style="background-color: #ffffff;">
-                            <table class="table table-bordered table-hover table-editable" id="editableTable-{{ $modalQuestion->id }}" style="background-color: #ffffff !important;">
+                            <table class="table table-bordered resizable-table table-editable" id="editableTable-{{ $modalQuestion->id }}" style="background-color: #ffffff !important;">
+                                <thead>
+                                    <tr class="header-row">
+                                        @for($c = 0; $c < $colCount; $c++)
+                                            <th class="resizable-th" style="position: relative; min-width: 120px; background-color: #f8f9fa; vertical-align: middle;">
+                                                @if(isset($tableToShow[0][$c]))
+                                                    {{ $tableToShow[0][$c] }}
+                                                @else
+                                                    Header {{ $c + 1 }}
+                                                @endif
+                                                <div class="column-resizer"></div>
+                                            </th>
+                                        @endfor
+                                    </tr>
+                                </thead>
                                 <tbody>
                                 @if(is_array($tableToShow) && count($tableToShow))
                                     @foreach($tableToShow as $r => $row)
@@ -719,6 +956,9 @@ foreach($attachedReviewTypes as $reviewType) {
                                 </button>
                                 <button type="button" class="btn btn-outline-danger btn-sm" onclick="deleteColumn({{ $modalQuestion->id }})">
                                     <i class="mdi mdi-minus"></i> Delete Column
+                                </button>
+                                <button type="button" class="btn btn-reset-columns btn-sm" onclick="resetColumnWidths('editableTable-{{ $modalQuestion->id }}')" title="Reset all columns to equal width">
+                                    <i class="mdi mdi-table-column-width"></i> Reset Columns
                                 </button>
                             </div>
                         </div>
@@ -836,6 +1076,252 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 });
+</script>
+
+<script>
+// Column Width Persistence Functions
+function saveColumnWidths(tableId) {
+    try {
+        let table = document.getElementById(tableId);
+        if (!table) return;
+        
+        let columnWidths = [];
+        let headerCells = table.querySelectorAll('thead th');
+        
+        headerCells.forEach(function(cell, index) {
+            let width = cell.style.width || cell.offsetWidth + 'px';
+            columnWidths.push(width);
+        });
+        
+        // Save to hidden input
+        let hiddenInput = document.getElementById('columnWidths-' + tableId.split('-')[1]);
+        if (hiddenInput) {
+            hiddenInput.value = JSON.stringify(columnWidths);
+        }
+        
+        // Also save to localStorage for backup
+        localStorage.setItem('columnWidths-' + tableId, JSON.stringify(columnWidths));
+    } catch (error) {
+        console.log('Error saving column widths:', error);
+    }
+}
+
+function restoreColumnWidths(tableId) {
+    try {
+        let table = document.getElementById(tableId);
+        if (!table) return;
+        
+        // First try to get from server-side data (form submission)
+        let questionId = tableId.split('-')[1];
+        let savedWidths = null;
+        
+        // Check if we have server-side saved widths
+        let serverData = window.savedColumnWidths && window.savedColumnWidths[questionId];
+        if (serverData) {
+            savedWidths = JSON.parse(serverData);
+        } else {
+            // Fallback to localStorage
+            let storedWidths = localStorage.getItem('columnWidths-' + tableId);
+            if (storedWidths) {
+                savedWidths = JSON.parse(storedWidths);
+            }
+        }
+        
+        if (savedWidths && savedWidths.length > 0) {
+            let headerCells = table.querySelectorAll('thead th');
+            
+            headerCells.forEach(function(cell, index) {
+                if (savedWidths[index]) {
+                    cell.style.width = savedWidths[index];
+                }
+            });
+            
+            // Update total table width
+            updateTableWidthIndependent(tableId);
+        }
+    } catch (error) {
+        console.log('Error restoring column widths:', error);
+    }
+}
+
+// Resizable Table Functionality for Dashboard
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize all resizable tables that are already visible
+    document.querySelectorAll('.resizable-table').forEach(function(table) {
+        initResizableColumnsDashboard(table);
+        addHeaderEditingCapabilityDashboard(table);
+        restoreColumnWidths(table.id);
+    });
+    
+    // Listen for Bootstrap modal show events to initialize resizable columns in modals
+    document.addEventListener('shown.bs.modal', function(event) {
+        const modal = event.target;
+        const table = modal.querySelector('.resizable-table');
+        if (table) {
+            initResizableColumnsDashboard(table);
+            addHeaderEditingCapabilityDashboard(table);
+            restoreColumnWidths(table.id);
+        }
+    });
+});
+
+function initResizableColumnsDashboard(table) {
+    const resizers = table.querySelectorAll('.column-resizer');
+    let isResizing = false;
+    let currentResizer = null;
+    let startX = 0;
+    let startWidth = 0;
+
+    resizers.forEach(function(resizer) {
+        resizer.addEventListener('mousedown', function(e) {
+            isResizing = true;
+            currentResizer = resizer;
+            startX = e.clientX;
+            
+            const th = resizer.closest('th');
+            startWidth = parseInt(document.defaultView.getComputedStyle(th).width, 10);
+            
+            resizer.classList.add('resizing');
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+            
+            e.preventDefault();
+        });
+    });
+
+    document.addEventListener('mousemove', function(e) {
+        if (!isResizing) return;
+        
+        const th = currentResizer.closest('th');
+        const width = startWidth + e.clientX - startX;
+        
+        // Enhanced minimum and maximum width constraints
+        const minWidth = 100; // Increased minimum width
+        const maxWidth = 600; // Increased maximum width for full content display
+        const constrainedWidth = Math.max(minWidth, Math.min(maxWidth, width));
+        
+        if (constrainedWidth !== parseInt(th.style.width, 10)) {
+            // Set the specific column width without affecting others
+            th.style.width = constrainedWidth + 'px';
+            th.style.minWidth = constrainedWidth + 'px';
+            th.style.maxWidth = constrainedWidth + 'px';
+            
+            // Update all cells in this specific column only
+            const columnIndex = Array.from(th.parentNode.children).indexOf(th);
+            const allRows = table.querySelectorAll('tr');
+            
+            allRows.forEach(function(row) {
+                if (row.children[columnIndex]) {
+                    const cell = row.children[columnIndex];
+                    cell.style.width = constrainedWidth + 'px';
+                    cell.style.minWidth = constrainedWidth + 'px';
+                    cell.style.maxWidth = constrainedWidth + 'px';
+                }
+            });
+            
+            // Update table width to accommodate all columns independently
+            updateTableWidthIndependent(table);
+        }
+    });
+
+    document.addEventListener('mouseup', function() {
+        if (!isResizing) return;
+        
+        isResizing = false;
+        if (currentResizer) {
+            currentResizer.classList.remove('resizing');
+        }
+        currentResizer = null;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+    });
+}
+
+// Function to update table width based on sum of all column widths (independent resizing)
+function updateTableWidthIndependent(table) {
+    const headerRow = table.querySelector('thead tr');
+    if (headerRow) {
+        let totalWidth = 0;
+        Array.from(headerRow.children).forEach(function(th) {
+            const colWidth = parseInt(th.style.width || th.offsetWidth, 10);
+            totalWidth += colWidth;
+        });
+        
+        // Set table width to sum of all columns to maintain independence
+        table.style.width = totalWidth + 'px';
+        table.style.minWidth = totalWidth + 'px';
+        
+        // Ensure table container can scroll horizontally if needed
+        const container = table.closest('.table-responsive');
+        if (container) {
+            container.style.overflowX = 'auto';
+        }
+    }
+}
+
+// Function to update table width based on column widths
+function updateTableWidth(table) {
+    // Use the independent version for better control
+    updateTableWidthIndependent(table);
+}
+
+// Function to reset all columns to default width
+function resetColumnWidths(tableId) {
+    const table = document.getElementById(tableId);
+    if (!table) return;
+    
+    const headerCells = table.querySelectorAll('thead th');
+    const containerWidth = table.closest('.table-responsive').offsetWidth;
+    const defaultWidth = Math.max(120, Math.floor(containerWidth / headerCells.length) - 10);
+    
+    headerCells.forEach(function(th, index) {
+        th.style.width = defaultWidth + 'px';
+        th.style.minWidth = defaultWidth + 'px';
+        th.style.maxWidth = defaultWidth + 'px';
+        
+        // Update all cells in this column
+        const allRows = table.querySelectorAll('tr');
+        allRows.forEach(function(row) {
+            if (row.children[index]) {
+                const cell = row.children[index];
+                cell.style.width = defaultWidth + 'px';
+                cell.style.minWidth = defaultWidth + 'px';
+                cell.style.maxWidth = defaultWidth + 'px';
+            }
+        });
+    });
+    
+    // Reset table width to sum of columns
+    updateTableWidthIndependent(table);
+}
+
+function addHeaderEditingCapabilityDashboard(table) {
+    const tableId = table.id;
+    const questionId = tableId.replace('editableTable-', '');
+    
+    // Add header editing capability
+    const headerRow = table.querySelector('.header-row');
+    if (headerRow) {
+        // Make headers editable
+        const headers = headerRow.querySelectorAll('th');
+        headers.forEach(function(th, index) {
+            const currentText = th.textContent.replace('Header ' + (index + 1), '').trim();
+            
+            th.innerHTML = `
+                <input type="text" 
+                       class="form-control form-control-sm fw-bold text-center border-0 header-input" 
+                       style="background: transparent; box-shadow: none;"
+                       name="answers[${questionId}][table][0][${index}]" 
+                       value="${currentText || 'Header ' + (index + 1)}" 
+                       placeholder="Header ${index + 1}">
+                <div class="column-resizer"></div>
+            `;
+        });
+        
+        // Re-initialize resizers after adding inputs
+        initResizableColumnsDashboard(table);
+    }
+}
 </script>
 
 <!-- scripts -->

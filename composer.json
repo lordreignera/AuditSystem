@@ -7,6 +7,7 @@
     "require": {
         "php": "^8.1",
         "doctrine/dbal": "^3.10",
+        "dompdf/dompdf": "^3.1",
         "guzzlehttp/guzzle": "^7.2",
         "laravel/framework": "^10.10",
         "laravel/jetstream": "^4.3",
@@ -14,7 +15,7 @@
         "laravel/tinker": "^2.8",
         "livewire/livewire": "^3.0",
         "maatwebsite/excel": "^3.1",
-        "phpoffice/phpspreadsheet": "^4.4",
+        "phpoffice/phpspreadsheet": "^1.30",
         "spatie/laravel-permission": "^6.20"
     },
     "require-dev": {

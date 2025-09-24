@@ -109,6 +109,10 @@
                                                    class="btn btn-outline-primary btn-sm">
                                                     <i class="mdi mdi-chart-line"></i> Generate Report
                                                 </a>
+                                                <a href="{{ route('admin.ai-chat.show', $audit) }}" 
+                                                   class="btn btn-outline-success btn-sm">
+                                                    <i class="mdi mdi-robot"></i> AI Chat
+                                                </a>
                                                 <a href="{{ route('admin.audits.dashboard', $audit) }}" 
                                                    class="btn btn-outline-secondary btn-sm">
                                                     <i class="mdi mdi-view-dashboard"></i> View Audit

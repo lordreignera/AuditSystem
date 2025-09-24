@@ -698,72 +698,53 @@ class ExcelImportExportController extends Controller
     private function isTableFormatSheet($sheet, $sheetName): bool
     {
         // Check for known table format sheets
-        $tableSheets = ['stock count', 'stock out', 'expiries', 'stock dispatch', 'cce'];
-        $lowerSheetName = strtolower($sheetName);
+        $tableSheets = ['stock count', 'stock out', 'expiries', 'stock dispatch', 'cce', 'data recon'];
+        $lowerSheetName = strtolower(trim($sheetName));  // Trim to handle trailing spaces
         
         foreach ($tableSheets as $tablePattern) {
             if (stripos($lowerSheetName, $tablePattern) !== false) {
+                Log::info("Sheet '{$sheetName}' identified as table format by name pattern: '{$tablePattern}'");
                 return true;
             }
         }
         
-        // Check if it has typical table headers in row 5-8 area
-        for ($row = 5; $row <= 8; $row++) {
+        // Check if it has typical table headers in row 5-10 area
+        for ($row = 5; $row <= 10; $row++) {
             $cellB = trim((string) $sheet->getCell("B{$row}")->getValue());
             $cellC = trim((string) $sheet->getCell("C{$row}")->getValue());
+            $cellD = trim((string) $sheet->getCell("D{$row}")->getValue());
             
             // Look for table headers like "Name of Vaccine", "UoM", "Batch No.", etc.
-            if (stripos($cellB, 'name of') !== false || 
-                stripos($cellC, 'uom') !== false ||
-                stripos($cellC, 'batch') !== false ||
-                stripos($cellC, 'expiry') !== false) {
+            if ((stripos($cellB, 'name of') !== false && stripos($cellB, 'vaccine') !== false) || 
+                (stripos($cellC, 'uom') !== false) ||
+                (stripos($cellC, 'batch') !== false) ||
+                (stripos($cellC, 'expiry') !== false) ||
+                (stripos($cellD, 'batch') !== false) ||
+                (stripos($cellB, 'equipment') !== false)) {
+                Log::info("Sheet '{$sheetName}' identified as table format by header detection at row {$row}");
                 return true;
             }
         }
         
+        Log::info("Sheet '{$sheetName}' identified as regular question format");
         return false;
     }
 
     /**
-     * Process table format sheets (Stock count, Stock Out, Expiries, etc.)
+     * Process table format sheets using unified approach (inspired by ExcelAuditTemplateSeeder)
+     * Handles any table structure with merged cells automatically
      */
     private function processTableFormatSheet($sheet, $template, $audit, $attachment, &$importStats, $isFirstImport): void
     {
+        $sheetName = $sheet->getTitle();
         $highestRow = $sheet->getHighestDataRow();
         $highestCol = $sheet->getHighestDataColumn();
+        $highestColIndex = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($highestCol);
         
-        // Find the header row (usually around row 5-8)
-        $headerRow = null;
-        $dataStartRow = null;
+        Log::info("Processing table format sheet: {$sheetName}, Rows: {$highestRow}, Cols: {$highestCol}");
         
-        for ($row = 5; $row <= 10; $row++) {
-            $cellB = trim((string) $sheet->getCell("B{$row}")->getValue());
-            if (stripos($cellB, 'name of') !== false || 
-                stripos($cellB, 'vaccine') !== false) {
-                $headerRow = $row;
-                $dataStartRow = $row + 1;
-                break;
-            }
-        }
-        
-        if (!$headerRow) {
-            Log::warning("Could not find header row in table format sheet: {$sheet->getTitle()}");
-            return;
-        }
-        
-        // Extract headers
-        $headers = [];
-        for ($col = 'A'; $col <= $highestCol; $col++) {
-            $headerValue = trim((string) $sheet->getCell($col . $headerRow)->getValue());
-            if (!empty($headerValue)) {
-                $headers[$col] = $headerValue;
-            }
-        }
-        
-        Log::info("Found table headers:", $headers);
-        
-        // Create section for this table (only on first import)
-        $sectionName = $sheet->getTitle() . ' Data';
+        // Create section for this sheet
+        $sectionName = trim($sheetName);
         $sectionNameTrunc = mb_substr($sectionName, 0, 255);
         $section = \App\Models\Section::where('template_id', $template->id)
             ->where('name', $sectionNameTrunc)
@@ -775,67 +756,227 @@ class ExcelImportExportController extends Controller
                 $section->template_id = $template->id;
                 $section->audit_id = $audit->id;
                 $section->name = $sectionNameTrunc;
-                $section->description = '';
+                $section->description = 'Auto-generated section for ' . $sheetName;
                 $section->order = 0;
                 $section->save();
                 $importStats['sections_created']++;
-                Log::info("Created new section for table: {$sectionNameTrunc} (ID: {$section->id})");
+                Log::info("Created new section: {$sectionNameTrunc} (ID: {$section->id})");
             } else {
-                Log::warning("Section not found for table sheet: {$sectionNameTrunc} - skipping");
+                Log::warning("Section not found for sheet: {$sectionNameTrunc} - skipping");
                 return;
             }
         }
         
-        // Create a single table question for this entire table (only on first import)
-        $questionText = "Table data for " . $sheet->getTitle();
+        // Get merged cells for proper handling
+        $mergedCells = $sheet->getMergeCells();
+        
+        // Detect and process all tables in the sheet using seeder's logic
+        $tables = $this->detectTablesUnified($sheet, $highestRow, $highestColIndex, $mergedCells);
+        
+        if (empty($tables)) {
+            Log::warning("No tables detected in sheet: {$sheetName}");
+            return;
+        }
+        
+        Log::info("Found " . count($tables) . " table(s) in sheet: {$sheetName}");
+        
+        foreach ($tables as $tableIndex => $tableData) {
+            $this->processTableUnified($tableData, $section, $audit, $attachment, $importStats, $tableIndex, $sheetName);
+        }
+    }
+    
+    /**
+     * Detect tables using unified approach from seeder
+     */
+    private function detectTablesUnified($sheet, $highestRow, $highestColIndex, $mergedCells): array
+    {
+        $row = 1;
+        $minTableCols = 3;
+        $maxEmptyRows = 2;
+        $tables = [];
+        $currentTable = [];
+        $descriptionRows = [];
+        $emptyRowCount = 0;
+        $tableStarted = false;
+        $tableStartRow = null;
+        
+        while ($row <= $highestRow) {
+            // Read all columns for this row
+            $cells = [];
+            for ($col = 1; $col <= $highestColIndex; $col++) {
+                $cellCoordinate = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($col) . $row;
+                $cellValue = $this->getCellValueWithMerged($sheet, $cellCoordinate, $mergedCells);
+                $cells[] = $cellValue;
+            }
+            $nonEmptyCount = count(array_filter($cells, fn($v) => trim($v) !== ''));
+            
+            if (!$tableStarted) {
+                if ($nonEmptyCount >= $minTableCols) {
+                    $tableStarted = true;
+                    $currentTable = [];
+                    $tableStartRow = $row;
+                    $currentTable[] = $cells;
+                    $emptyRowCount = 0;
+                } else {
+                    if ($nonEmptyCount > 0) {
+                        $descriptionRows[] = implode(' ', array_filter($cells));
+                    }
+                }
+            } else {
+                if ($nonEmptyCount == 0) {
+                    $emptyRowCount++;
+                    if ($emptyRowCount >= $maxEmptyRows) {
+                        // End of current table
+                        if (count($currentTable) > 1) {
+                            $tables[] = [
+                                'rows' => $currentTable,
+                                'start_row' => $tableStartRow,
+                                'description' => !empty($descriptionRows) ? implode(' ', $descriptionRows) : null,
+                                'merged_cells' => $this->getTableMergedCells($mergedCells, $tableStartRow, count($currentTable))
+                            ];
+                        }
+                        $tableStarted = false;
+                        $currentTable = [];
+                        $emptyRowCount = 0;
+                        $descriptionRows = []; // Reset for next table
+                    } else {
+                        $currentTable[] = $cells;
+                    }
+                } else {
+                    $emptyRowCount = 0;
+                    $currentTable[] = $cells;
+                }
+            }
+            $row++;
+        }
+        
+        // Save last table if still open
+        if ($tableStarted && count($currentTable) > 1) {
+            $tables[] = [
+                'rows' => $currentTable,
+                'start_row' => $tableStartRow,
+                'description' => !empty($descriptionRows) ? implode(' ', $descriptionRows) : null,
+                'merged_cells' => $this->getTableMergedCells($mergedCells, $tableStartRow, count($currentTable))
+            ];
+        }
+        
+        return $tables;
+    }
+    
+    /**
+     * Get cell value handling merged cells (simplified from seeder approach)
+     */
+    private function getCellValueWithMerged($sheet, $cellCoordinate, $mergedCells): string
+    {
+        $cellValue = trim($sheet->getCell($cellCoordinate)->getFormattedValue() ?? '');
+        
+        // If cell is empty or looks like cell reference, check if it's in a merged range
+        if (empty($cellValue) || preg_match('/^[A-Z]+\d+$/', $cellValue)) {
+            foreach ($mergedCells as $range) {
+                if ($this->isCellInMergedRange($cellCoordinate, $range)) {
+                    // Get value from top-left cell of merged range
+                    [$startCell] = explode(':', $range);
+                    $mergedValue = trim($sheet->getCell($startCell)->getFormattedValue() ?? '');
+                    if (!empty($mergedValue) && !preg_match('/^[A-Z]+\d+$/', $mergedValue)) {
+                        return $mergedValue;
+                    }
+                }
+            }
+        }
+        
+        // Return original value if not a cell reference
+        return preg_match('/^[A-Z]+\d+$/', $cellValue) ? '' : $cellValue;
+    }
+    
+    /**
+     * Check if cell is in merged range
+     */
+    private function isCellInMergedRange($cellCoordinate, $range): bool
+    {
+        try {
+            [$startCell, $endCell] = explode(':', $range);
+            
+            $cellCoord = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::coordinateFromString($cellCoordinate);
+            $startCoord = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::coordinateFromString($startCell);
+            $endCoord = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::coordinateFromString($endCell);
+            
+            $cellCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($cellCoord[0]);
+            $cellRow = $cellCoord[1];
+            
+            $startColIndex = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($startCoord[0]);
+            $startRow = $startCoord[1];
+            
+            $endColIndex = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($endCoord[0]);
+            $endRow = $endCoord[1];
+            
+            return ($cellCol >= $startColIndex && $cellCol <= $endColIndex && 
+                    $cellRow >= $startRow && $cellRow <= $endRow);
+        } catch (Exception $e) {
+            return false;
+        }
+    }
+    
+    /**
+     * Get merged cells that apply to a specific table
+     */
+    private function getTableMergedCells($allMergedCells, $tableStartRow, $tableRowCount): array
+    {
+        $tableMergedCells = [];
+        foreach ($allMergedCells as $range) {
+            if (preg_match('/([A-Z]+)(\d+):([A-Z]+)(\d+)/', $range, $m)) {
+                $startRow = intval($m[2]);
+                $endRow = intval($m[4]);
+                if ($startRow >= $tableStartRow && $endRow <= $tableStartRow + $tableRowCount - 1) {
+                    $tableMergedCells[] = $range;
+                }
+            }
+        }
+        return $tableMergedCells;
+    }
+    
+    /**
+     * Process a single table using unified approach
+     */
+    private function processTableUnified($tableData, $section, $audit, $attachment, &$importStats, $tableIndex, $sheetName): void
+    {
+        $tableRows = $tableData['rows'];
+        $description = $tableData['description'] ?? "Table " . ($tableIndex + 1) . " in " . $sheetName;
+        
+        // Find or create question for this table
+        $questionText = $description;
+        if (strlen($questionText) > 255) {
+            $questionText = substr($questionText, 0, 252) . '...';
+        }
+        
         $question = \App\Models\Question::where('section_id', $section->id)
             ->where('question_text', $questionText)
             ->where('audit_id', $audit->id)
             ->first();
+            
         if (!$question) {
-            if ($isFirstImport) {
-                $question = new \App\Models\Question();
-                $question->section_id = $section->id;
-                $question->audit_id = $audit->id;
-                $question->question_text = $questionText;
-                $question->response_type = 'table';
-                $question->options = json_encode(['headers' => $headers]);
-                $question->order = 0;
-                $question->is_required = false;
-                $question->save();
-                $importStats['questions_created']++;
-                Log::info("Created new table question: {$questionText} (ID: {$question->id})");
-            } else {
-                Log::warning("Table question not found: {$questionText} - skipping");
-                return;
-            }
+            $question = new \App\Models\Question();
+            $question->section_id = $section->id;
+            $question->audit_id = $audit->id;
+            $question->question_text = $questionText;
+            $question->response_type = 'table';
+            $question->options = json_encode([
+                'headers' => $tableRows[0] ?? [],
+                'merged_cells' => $tableData['merged_cells'] ?? []
+            ]);
+            $question->order = $tableIndex;
+            $question->is_required = false;
+            $question->save();
+            $importStats['questions_created']++;
+            Log::info("Created table question: {$questionText} (ID: {$question->id})");
         }
         
-        // Collect all table data
-        $tableData = [];
-        $tableData[] = array_values($headers); // Add headers as first row
-        
-        for ($row = $dataStartRow; $row <= $highestRow; $row++) {
-            $importStats['total_rows']++;
-            $rowData = [];
-            $hasData = false;
+        // Save table data as response
+        if (count($tableRows) > 1) { // More than just headers
+            $answerData = [
+                'value' => $tableRows,
+                'type' => 'table'
+            ];
             
-            foreach ($headers as $col => $header) {
-                $cellValue = $sheet->getCell($col . $row)->getValue();
-                $strValue = $cellValue === null ? '' : (string)$cellValue;
-                $rowData[] = $strValue;
-                if (!empty($strValue)) {
-                    $hasData = true;
-                }
-            }
-            
-            if ($hasData) {
-                $tableData[] = $rowData;
-            }
-        }
-        
-        // Save the table response
-        if (count($tableData) > 1) { // More than just headers
             $response = Response::updateOrCreate(
                 [
                     'audit_id'      => $audit->id,
@@ -843,7 +984,7 @@ class ExcelImportExportController extends Controller
                     'question_id'   => $question->id,
                 ],
                 [
-                    'answer'     => ['value' => $tableData, 'type' => 'table'],
+                    'answer'     => json_encode($answerData),
                     'audit_note' => '',
                     'created_by' => auth()->id(),
                 ]
@@ -851,10 +992,10 @@ class ExcelImportExportController extends Controller
             
             $importStats['responses_imported']++;
             $importStats['table_questions_imported']++;
-            Log::info("Table response saved for question ID: {$question->id} with " . (count($tableData) - 1) . " data rows");
+            Log::info("Table response saved for question ID: {$question->id} with " . (count($tableRows) - 1) . " data rows");
         }
     }
-
+    
     /**
      * Process regular question format sheets (Health Facility, etc.)
      */
@@ -984,7 +1125,4 @@ class ExcelImportExportController extends Controller
             Log::debug("Response saved for question ID: {$question->id}");
         }
     }
-// ...existing code...
-
-
 }

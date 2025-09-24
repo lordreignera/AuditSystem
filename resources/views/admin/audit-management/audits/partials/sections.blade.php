@@ -260,18 +260,37 @@ if($reviewType->auditTemplates && $reviewType->auditTemplates->count() > 0) {
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body bg-white">
-                    <form method="POST" action="{{ route('admin.review-types-crud.save-responses', $reviewType->id) }}">
+                    <form method="POST" action="{{ route('admin.review-types-crud.save-responses', $reviewType->id) }}" onsubmit="saveColumnWidthsSections('editableTable-{{ $modalQuestion->id }}')">
                         @csrf
                         <input type="hidden" name="audit_id" value="{{ $audit->id }}">
                         <input type="hidden" name="attachment_id" value="{{ $reviewType->attachmentId }}">
                         <input type="hidden" name="redirect_to" value="{{ url()->current() }}#tableModal-{{ $modalQuestion->id }}">
+                        <input type="hidden" name="answers[{{ $modalQuestion->id }}][column_widths]" id="columnWidthsSections-{{ $modalQuestion->id }}" value="">
                         <div class="mb-3">
                             <label for="headerRows-{{ $modalQuestion->id }}" class="form-label">Number of Header Rows</label>
                             <input type="number" min="1" max="{{ count($rows) }}" class="form-control form-control-sm w-auto d-inline-block" style="width: 80px;" name="answers[{{ $modalQuestion->id }}][header_rows]" id="headerRows-{{ $modalQuestion->id }}" value="{{ $options['header_rows'] ?? 1 }}">
                             <small class="text-muted ms-2">Set how many rows at the top are table headers.</small>
                         </div>
                         <div class="table-responsive">
-                            <table class="table table-bordered" id="editableTable-{{ $modalQuestion->id }}">
+                            <table class="table table-bordered resizable-table" id="editableTable-{{ $modalQuestion->id }}">
+                                <thead>
+                                    <tr class="header-row">
+                                        @php
+                                            $colCount = max(1, collect($tableToShow)->max(function($row) { return count($row); }));
+                                            if ($colCount < 2) $colCount = 2; // minimum 2 columns
+                                        @endphp
+                                        @for($c = 0; $c < $colCount; $c++)
+                                            <th class="resizable-th" style="position: relative; min-width: 120px;">
+                                                @if(isset($tableToShow[0][$c]))
+                                                    {{ $tableToShow[0][$c] }}
+                                                @else
+                                                    Header {{ $c + 1 }}
+                                                @endif
+                                                <div class="column-resizer"></div>
+                                            </th>
+                                        @endfor
+                                    </tr>
+                                </thead>
                                 <tbody>
                                 @php
                                     // Use header_rows from saved response if available, else from options
@@ -287,45 +306,29 @@ if($reviewType->auditTemplates && $reviewType->auditTemplates->count() > 0) {
                                 @endphp
                                 @if(count($tableToShow))
                                     @foreach($tableToShow as $r => $row)
-                                        <tr>
-                                            @foreach($row as $c => $cell)
-                                                @if($r < $headerRows)
-                                                    <th>
-                                                        <input type="text"
-                                                            class="form-control form-control-sm fw-bold text-center"
-                                                            name="answers[{{ $modalQuestion->id }}][table][{{ $r }}][{{ $c }}]"
-                                                            value="{{ old('answers.' . $modalQuestion->id . '.table.' . $r . '.' . $c, $tableToShow[$r][$c] ?? '') }}"
-                                                            placeholder="Header {{ $c+1 }}">
-                                                    </th>
-                                                @else
+                                        @if($r >= $headerRows)
+                                            <tr>
+                                                @foreach($row as $c => $cell)
                                                     <td>
                                                         <input type="text"
                                                             class="form-control"
                                                             name="answers[{{ $modalQuestion->id }}][table][{{ $r }}][{{ $c }}]"
                                                             value="{{ old('answers.' . $modalQuestion->id . '.table.' . $r . '.' . $c, $tableToShow[$r][$c] ?? '') }}">
                                                     </td>
+                                                @endforeach
+                                                @if(count($row) < $colCount)
+                                                    @for($i = count($row); $i < $colCount; $i++)
+                                                        <td>
+                                                            <input type="text" class="form-control"
+                                                                name="answers[{{ $modalQuestion->id }}][table][{{ $r }}][{{ $i }}]"
+                                                                value="{{ old('answers.' . $modalQuestion->id . '.table.' . $r . '.' . $i, $tableToShow[$r][$i] ?? '') }}">
+                                                        </td>
+                                                    @endfor
                                                 @endif
-                                            @endforeach
-                                            @if($r < $headerRows && count($row) < $colCount)
-                                                @for($i = count($row); $i < $colCount; $i++)
-                                                    <th>Header {{ $i+1 }}</th>
-                                                @endfor
-                                            @elseif($r >= $headerRows && count($row) < $colCount)
-                                                @for($i = count($row); $i < $colCount; $i++)
-                                                    <td>
-                                                        <input type="text" class="form-control"
-                                                            name="answers[{{ $modalQuestion->id }}][table][{{ $r }}][{{ $i }}]"
-                                                            value="{{ old('answers.' . $modalQuestion->id . '.table.' . $r . '.' . $i, $tableToShow[$r][$i] ?? '') }}">
-                                                    </td>
-                                                @endfor
-                                            @endif
-                                        </tr>
+                                            </tr>
+                                        @endif
                                     @endforeach
                                 @else
-                                    <tr>
-                                        <th>Header 1</th>
-                                        <th>Header 2</th>
-                                    </tr>
                                     <tr>
                                         <td>
                                             <input type="text" class="form-control"
@@ -349,6 +352,10 @@ if($reviewType->auditTemplates && $reviewType->auditTemplates->count() > 0) {
                                 onclick="deleteRow({{ $modalQuestion->id }})">Delete Row</button>
                             <button type="button" class="btn btn-outline-danger btn-sm"
                                 onclick="deleteColumn({{ $modalQuestion->id }})">Delete Column</button>
+                            <button type="button" class="btn btn-info btn-sm"
+                                onclick="resetColumnWidthsSections('editableTable-{{ $modalQuestion->id }}')" 
+                                title="Reset all columns to equal width">
+                                <i class="mdi mdi-table-column-width"></i> Reset Columns</button>
                         </div>
                         <div class="text-end mt-3">
                             <button type="submit" class="btn btn-primary">
@@ -361,3 +368,445 @@ if($reviewType->auditTemplates && $reviewType->auditTemplates->count() > 0) {
         </div>
     </div>
 @endforeach
+
+@push('scripts')
+<style>
+/* Resizable Table Styles */
+.resizable-table {
+    table-layout: fixed;
+    width: 100%;
+}
+
+.resizable-th {
+    position: relative;
+    overflow: hidden;
+    padding-right: 20px !important;
+    min-width: 100px !important; /* Increased minimum width */
+}
+
+.column-resizer {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 12px; /* Increased width for easier grabbing */
+    cursor: col-resize;
+    background: transparent;
+    border-right: 3px solid #dee2e6;
+    transition: border-color 0.2s;
+    z-index: 10;
+}
+
+.column-resizer:hover {
+    border-right-color: #007bff;
+    background: rgba(0, 123, 255, 0.15);
+    width: 15px; /* Wider on hover for easier targeting */
+}
+
+.column-resizer.resizing {
+    border-right-color: #007bff;
+    background: rgba(0, 123, 255, 0.25);
+    width: 15px;
+}
+
+.resizable-table th input,
+.resizable-table td input {
+    width: 100%;
+    border: none;
+    padding: 8px;
+    background: transparent;
+    margin: 0;
+    min-width: 0; /* Allow inputs to shrink */
+    box-sizing: border-box;
+}
+    width: 100%;
+    border: none;
+    background: transparent;
+    padding: 8px 5px;
+}
+
+.resizable-table th input {
+    font-weight: bold;
+    text-align: center;
+    background: rgba(0, 123, 255, 0.1);
+}
+
+.resizable-table th input:focus,
+.resizable-table td input:focus {
+    outline: 2px solid #007bff;
+    outline-offset: -2px;
+    background: #fff;
+}
+
+/* Better table appearance */
+.resizable-table th {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    font-weight: 600;
+}
+
+.resizable-table td {
+    border: 1px solid #dee2e6;
+    padding: 0;
+}
+
+/* Header editing */
+.header-edit-row th {
+    background: rgba(0, 123, 255, 0.05);
+}
+
+.table-controls {
+    margin: 10px 0;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.header-toggle {
+    margin-left: auto;
+}
+</style>
+
+<script>
+// Column Width Persistence Functions for Sections
+function saveColumnWidthsSections(tableId) {
+    try {
+        let table = document.getElementById(tableId);
+        if (!table) return;
+        
+        let columnWidths = [];
+        let headerCells = table.querySelectorAll('thead th');
+        
+        headerCells.forEach(function(cell, index) {
+            let width = cell.style.width || cell.offsetWidth + 'px';
+            columnWidths.push(width);
+        });
+        
+        // Save to hidden input
+        let hiddenInput = document.getElementById('columnWidthsSections-' + tableId.split('-')[1]);
+        if (hiddenInput) {
+            hiddenInput.value = JSON.stringify(columnWidths);
+        }
+        
+        // Also save to localStorage for backup
+        localStorage.setItem('columnWidthsSections-' + tableId, JSON.stringify(columnWidths));
+    } catch (error) {
+        console.log('Error saving column widths:', error);
+    }
+}
+
+function restoreColumnWidthsSections(tableId) {
+    try {
+        let table = document.getElementById(tableId);
+        if (!table) return;
+        
+        // First try to get from server-side data (form submission)
+        let questionId = tableId.split('-')[1];
+        let savedWidths = null;
+        
+        // Check if we have server-side saved widths
+        let serverData = window.savedColumnWidthsSections && window.savedColumnWidthsSections[questionId];
+        if (serverData) {
+            savedWidths = JSON.parse(serverData);
+        } else {
+            // Fallback to localStorage
+            let storedWidths = localStorage.getItem('columnWidthsSections-' + tableId);
+            if (storedWidths) {
+                savedWidths = JSON.parse(storedWidths);
+            }
+        }
+        
+        if (savedWidths && savedWidths.length > 0) {
+            let headerCells = table.querySelectorAll('thead th');
+            
+            headerCells.forEach(function(cell, index) {
+                if (savedWidths[index]) {
+                    cell.style.width = savedWidths[index];
+                }
+            });
+            
+            // Update total table width
+            updateTableWidthSectionsIndependent(tableId);
+        }
+    } catch (error) {
+        console.log('Error restoring column widths:', error);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize all resizable tables that are already visible
+    document.querySelectorAll('.resizable-table').forEach(function(table) {
+        initResizableColumns(table);
+        addHeaderEditingCapability(table);
+        restoreColumnWidthsSections(table.id);
+    });
+    
+    // Listen for Bootstrap modal show events to initialize resizable columns in modals
+    document.addEventListener('shown.bs.modal', function(event) {
+        const modal = event.target;
+        const table = modal.querySelector('.resizable-table');
+        if (table) {
+            initResizableColumns(table);
+            addHeaderEditingCapability(table);
+            restoreColumnWidthsSections(table.id);
+        }
+    });
+});
+
+function initResizableColumns(table) {
+    const resizers = table.querySelectorAll('.column-resizer');
+    let isResizing = false;
+    let currentResizer = null;
+    let startX = 0;
+    let startWidth = 0;
+
+    resizers.forEach(function(resizer) {
+        resizer.addEventListener('mousedown', function(e) {
+            isResizing = true;
+            currentResizer = resizer;
+            startX = e.clientX;
+            
+            const th = resizer.closest('th');
+            startWidth = parseInt(document.defaultView.getComputedStyle(th).width, 10);
+            
+            resizer.classList.add('resizing');
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+            
+            e.preventDefault();
+        });
+    });
+
+    document.addEventListener('mousemove', function(e) {
+        if (!isResizing) return;
+        
+        const th = currentResizer.closest('th');
+        const width = startWidth + e.clientX - startX;
+        
+        // Enhanced minimum and maximum width constraints
+        const minWidth = 100; // Increased minimum width
+        const maxWidth = 600; // Increased maximum width for full content display
+        const constrainedWidth = Math.max(minWidth, Math.min(maxWidth, width));
+        
+        if (constrainedWidth !== parseInt(th.style.width, 10)) {
+            // Set the specific column width without affecting others
+            th.style.width = constrainedWidth + 'px';
+            th.style.minWidth = constrainedWidth + 'px';
+            th.style.maxWidth = constrainedWidth + 'px';
+            
+            // Update all cells in this specific column only
+            const columnIndex = Array.from(th.parentNode.children).indexOf(th);
+            const allRows = table.querySelectorAll('tr');
+            
+            allRows.forEach(function(row) {
+                if (row.children[columnIndex]) {
+                    const cell = row.children[columnIndex];
+                    cell.style.width = constrainedWidth + 'px';
+                    cell.style.minWidth = constrainedWidth + 'px';
+                    cell.style.maxWidth = constrainedWidth + 'px';
+                }
+            });
+            
+            // Update table width to accommodate all columns independently
+            updateTableWidthSectionsIndependent(table);
+        }
+    });
+
+    document.addEventListener('mouseup', function() {
+        if (!isResizing) return;
+        
+        isResizing = false;
+        if (currentResizer) {
+            currentResizer.classList.remove('resizing');
+        }
+        currentResizer = null;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+    });
+}
+
+    document.addEventListener('mouseup', function() {
+        if (!isResizing) return;
+        
+        isResizing = false;
+        if (currentResizer) {
+            currentResizer.classList.remove('resizing');
+        }
+        currentResizer = null;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+    });
+}
+
+function addHeaderEditingCapability(table) {
+    const tableId = table.id;
+    const questionId = tableId.replace('editableTable-', '');
+    
+    // Add header editing capability
+    const headerRow = table.querySelector('.header-row');
+    if (headerRow) {
+        // Make headers editable
+        const headers = headerRow.querySelectorAll('th');
+        headers.forEach(function(th, index) {
+            const currentText = th.textContent.replace('Header ' + (index + 1), '').trim();
+            const resizer = th.querySelector('.column-resizer');
+            
+            th.innerHTML = `
+                <input type="text" 
+                       class="form-control form-control-sm fw-bold text-center header-input" 
+                       name="answers[${questionId}][table][0][${index}]" 
+                       value="${currentText || 'Header ' + (index + 1)}" 
+                       placeholder="Header ${index + 1}">
+                <div class="column-resizer"></div>
+            `;
+        });
+        
+        // Re-initialize resizers after adding inputs
+        initResizableColumns(table);
+    }
+}
+
+// Enhanced table manipulation functions
+    });
+}
+
+// Function to update table width based on sum of all column widths (independent resizing)
+function updateTableWidthSectionsIndependent(table) {
+    const headerRow = table.querySelector('thead tr');
+    if (headerRow) {
+        let totalWidth = 0;
+        Array.from(headerRow.children).forEach(function(th) {
+            const colWidth = parseInt(th.style.width || th.offsetWidth, 10);
+            totalWidth += colWidth;
+        });
+        
+        // Set table width to sum of all columns to maintain independence
+        table.style.width = totalWidth + 'px';
+        table.style.minWidth = totalWidth + 'px';
+        
+        // Ensure table container can scroll horizontally if needed
+        const container = table.closest('.table-responsive');
+        if (container) {
+            container.style.overflowX = 'auto';
+        }
+    }
+}
+
+// Function to update table width based on column widths
+function updateTableWidthSections(table) {
+    // Use the independent version for better control
+    updateTableWidthSectionsIndependent(table);
+}
+
+// Function to reset all columns to default width
+function resetColumnWidthsSections(tableId) {
+    const table = document.getElementById(tableId);
+    if (!table) return;
+    
+    const headerCells = table.querySelectorAll('thead th');
+    const containerWidth = table.closest('.table-responsive').offsetWidth;
+    const defaultWidth = Math.max(120, Math.floor(containerWidth / headerCells.length) - 10);
+    
+    headerCells.forEach(function(th, index) {
+        th.style.width = defaultWidth + 'px';
+        th.style.minWidth = defaultWidth + 'px';
+        th.style.maxWidth = defaultWidth + 'px';
+        
+        // Update all cells in this column
+        const allRows = table.querySelectorAll('tr');
+        allRows.forEach(function(row) {
+            if (row.children[index]) {
+                const cell = row.children[index];
+                cell.style.width = defaultWidth + 'px';
+                cell.style.minWidth = defaultWidth + 'px';
+                cell.style.maxWidth = defaultWidth + 'px';
+            }
+        });
+    });
+    
+    // Reset table width to sum of columns
+    updateTableWidthSectionsIndependent(table);
+}
+
+function addRow(questionId) {
+    const table = document.getElementById('editableTable-' + questionId);
+    const tbody = table.querySelector('tbody');
+    const lastRow = tbody.querySelector('tr:last-child');
+    const columnCount = lastRow ? lastRow.children.length : 2;
+    
+    const newRow = document.createElement('tr');
+    const currentRowIndex = tbody.children.length + 1; // +1 for header row
+    
+    for (let i = 0; i < columnCount; i++) {
+        const cell = document.createElement('td');
+        cell.innerHTML = `<input type="text" class="form-control" name="answers[${questionId}][table][${currentRowIndex}][${i}]">`;
+        newRow.appendChild(cell);
+    }
+    
+    tbody.appendChild(newRow);
+}
+
+function addColumn(questionId) {
+    const table = document.getElementById('editableTable-' + questionId);
+    const headerRow = table.querySelector('.header-row');
+    const rows = table.querySelectorAll('tr');
+    const newColumnIndex = headerRow.children.length;
+    
+    // Add header
+    const newHeader = document.createElement('th');
+    newHeader.className = 'resizable-th';
+    newHeader.style.position = 'relative';
+    newHeader.style.minWidth = '120px';
+    newHeader.innerHTML = `
+        <input type="text" 
+               class="form-control form-control-sm fw-bold text-center header-input" 
+               name="answers[${questionId}][table][0][${newColumnIndex}]" 
+               value="Header ${newColumnIndex + 1}" 
+               placeholder="Header ${newColumnIndex + 1}">
+        <div class="column-resizer"></div>
+    `;
+    headerRow.appendChild(newHeader);
+    
+    // Add cells to data rows
+    const dataRows = table.querySelectorAll('tbody tr');
+    dataRows.forEach(function(row, rowIndex) {
+        const newCell = document.createElement('td');
+        newCell.innerHTML = `<input type="text" class="form-control" name="answers[${questionId}][table][${rowIndex + 1}][${newColumnIndex}]">`;
+        row.appendChild(newCell);
+    });
+    
+    // Re-initialize resizers
+    initResizableColumns(table);
+}
+
+function deleteRow(questionId) {
+    const table = document.getElementById('editableTable-' + questionId);
+    const tbody = table.querySelector('tbody');
+    const rows = tbody.querySelectorAll('tr');
+    
+    if (rows.length > 1) {
+        tbody.removeChild(rows[rows.length - 1]);
+    } else {
+        alert('At least one data row is required.');
+    }
+}
+
+function deleteColumn(questionId) {
+    const table = document.getElementById('editableTable-' + questionId);
+    const headerRow = table.querySelector('.header-row');
+    const allRows = table.querySelectorAll('tr');
+    
+    if (headerRow.children.length > 2) {
+        const lastColumnIndex = headerRow.children.length - 1;
+        
+        allRows.forEach(function(row) {
+            if (row.children[lastColumnIndex]) {
+                row.removeChild(row.children[lastColumnIndex]);
+            }
+        });
+    } else {
+        alert('At least two columns are required.');
+    }
+}
+</script>
+@endpush

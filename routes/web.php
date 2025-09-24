@@ -177,6 +177,11 @@ Route::middleware([
         Route::patch('users/{user}/toggle-status', [\App\Http\Controllers\Admin\UserManagement\UserController::class, 'toggleStatus'])
             ->name('admin.users.toggle-status');
         
+        // Resizable Table Demo Route
+        Route::get('/resizable-table-demo', function () {
+            return view('admin.test-resizable-table');
+        })->name('admin.resizable-table-demo');
+        
         // Role Management Routes
         Route::resource('roles', \App\Http\Controllers\Admin\UserManagement\RoleController::class, [
             'as' => 'admin'
@@ -301,7 +306,19 @@ Route::middleware([
         // Reports Routes
         Route::get('reports', [\App\Http\Controllers\Admin\ReportController::class, 'index'])->name('admin.reports.index');
         Route::get('reports/{audit}', [\App\Http\Controllers\Admin\ReportController::class, 'show'])->name('admin.reports.show');
+        Route::get('reports/{audit}/debug-data', [\App\Http\Controllers\Admin\ReportController::class, 'debugAuditData'])->name('admin.reports.debug-data');
         Route::post('reports/{audit}/generate', [\App\Http\Controllers\Admin\ReportController::class, 'generateAiReport'])->name('admin.reports.generate');
+    Route::post('reports/{audit}/export-pdf', [\App\Http\Controllers\Admin\ReportController::class, 'exportAsPDF'])->name('admin.reports.export-pdf');
+        Route::post('reports/{audit}/export-word', [\App\Http\Controllers\Admin\ReportController::class, 'exportReportToWord'])->name('admin.reports.export-word');
+        
+        // AI Chat Routes
+        Route::get('ai-chat/{audit}', [\App\Http\Controllers\Admin\AIChatController::class, 'show'])->name('admin.ai-chat.show');
+        Route::post('ai-chat/{audit}/chat', [\App\Http\Controllers\Admin\AIChatController::class, 'chat'])->name('admin.ai-chat.chat');
+        Route::post('ai-chat/{audit}/generate-chart', [\App\Http\Controllers\Admin\AIChatController::class, 'generateChart'])->name('admin.ai-chat.generate-chart');
+        Route::post('ai-chat/{audit}/generate-table', [\App\Http\Controllers\Admin\AIChatController::class, 'generateTable'])->name('admin.ai-chat.generate-table');
+        Route::post('ai-chat/{audit}/export-pdf', [\App\Http\Controllers\Admin\AIChatController::class, 'exportToPdf'])->name('admin.ai-chat.export-pdf');
+        Route::post('ai-chat/{audit}/export-word', [\App\Http\Controllers\Admin\AIChatController::class, 'exportToWord'])->name('admin.ai-chat.export-word');
+        Route::post('ai-chat/{audit}/compare-templates', [\App\Http\Controllers\Admin\AIChatController::class, 'compareTemplates'])->name('admin.ai-chat.compare-templates');
         
         // Review Types management
         Route::resource('review-types', \App\Http\Controllers\Admin\ReviewTypeController::class, [

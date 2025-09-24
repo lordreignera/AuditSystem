@@ -34,6 +34,9 @@
                         </p>
                     </div>
                     <div class="text-end">
+                        <a href="{{ route('admin.ai-chat.show', $audit) }}" class="btn btn-success btn-sm me-2">
+                            <i class="mdi mdi-robot me-1"></i>AI Chat Assistant
+                        </a>
                         <span class="badge badge-light">{{ $audit->review_code }}</span>
                     </div>
                 </div>
@@ -53,6 +56,125 @@
                         </ul>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts and Analytics Section -->
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="mdi mdi-chart-line me-2"></i>Audit Analytics & Visualizations
+                    </h5>
+                    <div>
+                        <button class="btn btn-outline-primary btn-sm" onclick="generateChart('completion_rates')">
+                            <i class="mdi mdi-chart-bar me-1"></i>Completion Chart
+                        </button>
+                        <button class="btn btn-outline-success btn-sm" onclick="generateChart('review_types')">
+                            <i class="mdi mdi-chart-pie me-1"></i>Review Types
+                        </button>
+                        <button class="btn btn-outline-info btn-sm" onclick="generateChart('location_comparison')">
+                            <i class="mdi mdi-chart-donut me-1"></i>Location Comparison
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-8">
+                        <!-- Chart Container -->
+                        <div id="chartContainer" style="display: none;">
+                            <canvas id="auditChart" width="400" height="200"></canvas>
+                            <div class="mt-3 text-center">
+                                <button class="btn btn-sm btn-outline-secondary" onclick="downloadChart()">
+                                    <i class="mdi mdi-download me-1"></i>Download Chart
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Default State -->
+                        <div id="chartPlaceholder" class="text-center py-5">
+                            <i class="mdi mdi-chart-line" style="font-size: 64px; color: #e0e0e0;"></i>
+                            <h5 class="text-muted mt-3">Generate Charts & Analytics</h5>
+                            <p class="text-muted">Click the buttons above to generate visual analytics for your audit data</p>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <!-- Chart Legend/Info -->
+                        <div id="chartInfo" style="display: none;">
+                            <h6 class="text-primary">Chart Information</h6>
+                            <div id="chartDetails"></div>
+                        </div>
+                        
+                        <!-- Key Metrics -->
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h6 class="card-title">Key Metrics</h6>
+                                <div class="row text-center">
+                                    <div class="col-6">
+                                        <div class="metric-item">
+                                            <h4 class="text-primary">{{ count($reviewTypesData) }}</h4>
+                                            <small class="text-muted">Review Types</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-6">
+                                        <div class="metric-item">
+                                            <h4 class="text-success">{{ $responseStats['total_responses'] }}</h4>
+                                            <small class="text-muted">Total Responses</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-6 mt-3">
+                                        <div class="metric-item">
+                                            <h4 class="text-info">{{ collect($reviewTypesData)->sum(function($rt) { return count($rt['locations']); }) }}</h4>
+                                            <small class="text-muted">Locations</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-6 mt-3">
+                                        <div class="metric-item">
+                                            <h4 class="text-warning">
+                                                @php
+                                                    $totalQuestions = 0;
+                                                    $totalResponses = $responseStats['total_responses'];
+                                                    foreach($reviewTypesData as $rt) {
+                                                        foreach($rt['locations'] as $loc) {
+                                                            $totalQuestions += $loc['total_questions'];
+                                                        }
+                                                    }
+                                                    $completionRate = $totalQuestions > 0 ? round(($totalResponses / $totalQuestions) * 100, 1) : 0;
+                                                @endphp
+                                                {{ $completionRate }}%
+                                            </h4>
+                                            <small class="text-muted">Completion Rate</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Data Collection Test Panel -->
+<div class="row mb-3">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">🔍 Data Collection Test</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">Test what data the AI can read from your audit responses:</p>
+                <button type="button" class="btn btn-info" onclick="testDataCollection()">
+                    <i class="mdi mdi-database-search me-1"></i>Test Data Collection
+                </button>
+                <div id="dataTestResult" class="mt-3" style="display: none;"></div>
             </div>
         </div>
     </div>
@@ -279,13 +401,27 @@
                 <div id="reportContent" class="report-content"></div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <button type="button" class="btn btn-primary" onclick="downloadReport()">
-                    <i class="mdi mdi-download me-1"></i>Download Report
-                </button>
-                <button type="button" class="btn btn-success" onclick="copyToClipboard()">
-                    <i class="mdi mdi-content-copy me-1"></i>Copy to Clipboard
-                </button>
+                <div class="d-flex justify-content-between w-100">
+                    <div>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                    <div>
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-danger" onclick="exportToPDF(this)">
+                                <i class="mdi mdi-file-pdf me-1"></i>Export PDF
+                            </button>
+                            <button type="button" class="btn btn-primary" onclick="exportToWord(this)">
+                                <i class="mdi mdi-file-word me-1"></i>Export Word
+                            </button>
+                            <button type="button" class="btn btn-success" onclick="exportToExcel()">
+                                <i class="mdi mdi-file-excel me-1"></i>Export Excel
+                            </button>
+                        </div>
+                        <button type="button" class="btn btn-info ms-2" onclick="copyToClipboard()">
+                            <i class="mdi mdi-content-copy me-1"></i>Copy
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -358,7 +494,27 @@
 }
 </style>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
+let currentChart = null;
+let currentReportContent = '';
+
+const auditData = {
+    reviewTypes: @json($reviewTypesData),
+    responseStats: @json($responseStats),
+    auditInfo: {
+        name: '{{ $audit->name }}',
+        country: '{{ $audit->country->name }}',
+        startDate: '{{ $audit->start_date->format('M j, Y') }}',
+        @if($audit->end_date)
+        endDate: '{{ $audit->end_date->format('M j, Y') }}',
+        @endif
+        reviewCode: '{{ $audit->review_code }}'
+    }
+};
+
 document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('reportGenerationForm');
     const generateBtn = document.getElementById('generateBtn');
@@ -393,13 +549,27 @@ document.addEventListener('DOMContentLoaded', function() {
             const result = await response.json();
 
             if (result.success) {
+                currentReportContent = result.report_content;
+                
+                // Create report content with metadata
+                let reportDisplay = '';
+                if (result.data_summary) {
+                    reportDisplay += '<div class="alert alert-info mb-3">';
+                    reportDisplay += '<h6>📊 Report Analysis Summary</h6>';
+                    reportDisplay += `<small>Analyzed ${result.data_summary.review_types_analyzed} review types, `;
+                    reportDisplay += `${result.data_summary.total_responses_analyzed} responses, `;
+                    reportDisplay += `${result.data_summary.total_questions_analyzed} questions</small>`;
+                    reportDisplay += '</div>';
+                }
+                
                 // Display the report with proper styling
-                document.getElementById('reportContent').innerHTML = 
-                    '<div style="background-color: #ffffff; color: #2d3748; padding: 1rem; border-radius: 0.375rem;">' +
+                reportDisplay += '<div style="background-color: #ffffff; color: #2d3748; padding: 1rem; border-radius: 0.375rem;">' +
                     '<pre style="background-color: #ffffff !important; color: #2d3748 !important; border: none; padding: 0; margin: 0; font-family: \'Segoe UI\', Tahoma, Geneva, Verdana, sans-serif !important; white-space: pre-wrap; word-wrap: break-word;">' + 
                     result.report_content + 
                     '</pre>' +
                     '</div>';
+                
+                document.getElementById('reportContent').innerHTML = reportDisplay;
                 reportModal.show();
             } else {
                 alert('Error generating report: ' + result.message);
@@ -414,6 +584,361 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 });
+
+// Helper function to get selected report type
+function getSelectedReportType() {
+    const form = document.getElementById('reportGenerationForm');
+    const formData = new FormData(form);
+    return formData.get('report_type') || 'comprehensive';
+}
+
+// Chart Generation Functions
+function generateChart(chartType) {
+    let chartData, chartConfig;
+    
+    switch(chartType) {
+        case 'completion_rates':
+            chartData = getCompletionRatesData();
+            chartConfig = createBarChartConfig(chartData, 'Completion Rates by Location');
+            updateChartInfo('Shows completion percentage for each location across all review types.');
+            break;
+            
+        case 'review_types':
+            chartData = getReviewTypesData();
+            chartConfig = createPieChartConfig(chartData, 'Review Types Distribution');
+            updateChartInfo('Distribution of responses across different review types.');
+            break;
+            
+        case 'location_comparison':
+            chartData = getLocationComparisonData();
+            chartConfig = createDoughnutChartConfig(chartData, 'Location Response Comparison');
+            updateChartInfo('Comparison of total responses by location.');
+            break;
+    }
+    
+    renderChart(chartConfig);
+}
+
+function getCompletionRatesData() {
+    const labels = [];
+    const data = [];
+    const backgroundColors = [];
+    
+    auditData.reviewTypes.forEach((reviewType, rtIndex) => {
+        reviewType.locations.forEach((location, locIndex) => {
+            labels.push(`${location.location_name} (${reviewType.review_type.name})`);
+            data.push(location.completion_percentage);
+            
+            // Color coding based on completion rate
+            if (location.completion_percentage >= 80) {
+                backgroundColors.push('rgba(75, 192, 192, 0.8)'); // Green
+            } else if (location.completion_percentage >= 60) {
+                backgroundColors.push('rgba(255, 206, 86, 0.8)'); // Yellow
+            } else {
+                backgroundColors.push('rgba(255, 99, 132, 0.8)'); // Red
+            }
+        });
+    });
+    
+    return { labels, data, backgroundColors };
+}
+
+function getReviewTypesData() {
+    const labels = [];
+    const data = [];
+    const backgroundColors = [
+        'rgba(255, 99, 132, 0.8)',
+        'rgba(54, 162, 235, 0.8)',
+        'rgba(255, 206, 86, 0.8)',
+        'rgba(75, 192, 192, 0.8)',
+        'rgba(153, 102, 255, 0.8)',
+        'rgba(255, 159, 64, 0.8)'
+    ];
+    
+    auditData.reviewTypes.forEach((reviewType, index) => {
+        labels.push(reviewType.review_type.name);
+        const totalResponses = reviewType.locations.reduce((sum, loc) => sum + loc.response_count, 0);
+        data.push(totalResponses);
+    });
+    
+    return { labels, data, backgroundColors };
+}
+
+function getLocationComparisonData() {
+    const locationData = {};
+    
+    auditData.reviewTypes.forEach(reviewType => {
+        reviewType.locations.forEach(location => {
+            if (!locationData[location.location_name]) {
+                locationData[location.location_name] = 0;
+            }
+            locationData[location.location_name] += location.response_count;
+        });
+    });
+    
+    const labels = Object.keys(locationData);
+    const data = Object.values(locationData);
+    const backgroundColors = [
+        'rgba(255, 99, 132, 0.8)',
+        'rgba(54, 162, 235, 0.8)',
+        'rgba(255, 206, 86, 0.8)',
+        'rgba(75, 192, 192, 0.8)',
+        'rgba(153, 102, 255, 0.8)',
+        'rgba(255, 159, 64, 0.8)'
+    ];
+    
+    return { labels, data, backgroundColors };
+}
+
+function createBarChartConfig(chartData, title) {
+    return {
+        type: 'bar',
+        data: {
+            labels: chartData.labels,
+            datasets: [{
+                label: 'Completion %',
+                data: chartData.data,
+                backgroundColor: chartData.backgroundColors,
+                borderColor: chartData.backgroundColors.map(color => color.replace('0.8', '1')),
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                title: {
+                    display: true,
+                    text: title,
+                    font: { size: 16, weight: 'bold' }
+                },
+                legend: { display: false }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    ticks: {
+                        callback: function(value) {
+                            return value + '%';
+                        }
+                    }
+                },
+                x: {
+                    ticks: {
+                        maxRotation: 45,
+                        minRotation: 45
+                    }
+                }
+            }
+        }
+    };
+}
+
+function createPieChartConfig(chartData, title) {
+    return {
+        type: 'pie',
+        data: {
+            labels: chartData.labels,
+            datasets: [{
+                data: chartData.data,
+                backgroundColor: chartData.backgroundColors,
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                title: {
+                    display: true,
+                    text: title,
+                    font: { size: 16, weight: 'bold' }
+                },
+                legend: {
+                    position: 'right'
+                }
+            }
+        }
+    };
+}
+
+function createDoughnutChartConfig(chartData, title) {
+    return {
+        type: 'doughnut',
+        data: {
+            labels: chartData.labels,
+            datasets: [{
+                data: chartData.data,
+                backgroundColor: chartData.backgroundColors,
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                title: {
+                    display: true,
+                    text: title,
+                    font: { size: 16, weight: 'bold' }
+                },
+                legend: {
+                    position: 'bottom'
+                }
+            }
+        }
+    };
+}
+
+function renderChart(config) {
+    const ctx = document.getElementById('auditChart').getContext('2d');
+    
+    if (currentChart) {
+        currentChart.destroy();
+    }
+    
+    currentChart = new Chart(ctx, config);
+    
+    // Show chart container and hide placeholder
+    document.getElementById('chartContainer').style.display = 'block';
+    document.getElementById('chartPlaceholder').style.display = 'none';
+    document.getElementById('chartInfo').style.display = 'block';
+}
+
+function updateChartInfo(description) {
+    document.getElementById('chartDetails').innerHTML = `
+        <p class="small text-muted">${description}</p>
+        <div class="mt-2">
+            <small><strong>Last Updated:</strong> ${new Date().toLocaleString()}</small>
+        </div>
+    `;
+}
+
+function downloadChart() {
+    if (currentChart) {
+        const url = currentChart.toBase64Image();
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${auditData.auditInfo.name}_chart.png`;
+        link.click();
+    }
+}
+
+// Export Functions
+function exportToPDF(btn = null) {
+    if (!currentReportContent) {
+        alert('No report to export. Please generate a report first.');
+        return;
+    }
+    
+    // Use backend PDF generation for generated reports
+    const formData = new FormData();
+    formData.append('report_content', currentReportContent);
+    formData.append('report_type', getSelectedReportType());
+    formData.append('_token', document.querySelector('meta[name="csrf-token"]').getAttribute('content'));
+    
+    // Show loading
+    if (btn) {
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '<i class="mdi mdi-loading mdi-spin me-1"></i>Generating PDF...';
+        btn.disabled = true;
+        
+        fetch('{{ route("admin.reports.export-pdf", $audit) }}', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            if (response.ok) {
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('text/html')) {
+                    // HTML fallback - open in new window for printing
+                    return response.text();
+                } else {
+                    // PDF blob
+                    return response.blob();
+                }
+            } else {
+                throw new Error('Failed to generate PDF');
+            }
+        })
+        .then(result => {
+            if (typeof result === 'string') {
+                // HTML content - open in new window
+                const newWindow = window.open();
+                newWindow.document.write(result);
+                newWindow.document.close();
+            } else {
+                // PDF blob - download
+                const url = window.URL.createObjectURL(result);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `Audit_Report_${auditData.auditInfo.name.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pdf`;
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                window.URL.revokeObjectURL(url);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Failed to generate PDF. Please try again.');
+        })
+        .finally(() => {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        });
+    }
+}
+
+
+
+function exportToExcel() {
+    if (!auditData.reviewTypes || auditData.reviewTypes.length === 0) {
+        alert('No audit data to export.');
+        return;
+    }
+    
+    // Create workbook
+    const wb = XLSX.utils.book_new();
+    
+    // Summary sheet
+    const summaryData = [
+        ['Audit Name', auditData.auditInfo.name],
+        ['Country', auditData.auditInfo.country],
+        ['Start Date', auditData.auditInfo.startDate],
+        ['Review Code', auditData.auditInfo.reviewCode],
+        ['Generated', new Date().toLocaleDateString()],
+        [''],
+        ['Total Review Types', auditData.reviewTypes.length],
+        ['Total Responses', auditData.responseStats.total_responses]
+    ];
+    
+    const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+    XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
+    
+    // Detailed data sheet
+    const detailData = [['Review Type', 'Location', 'Type', 'Responses', 'Total Questions', 'Completion %']];
+    
+    auditData.reviewTypes.forEach(reviewType => {
+        reviewType.locations.forEach(location => {
+            detailData.push([
+                reviewType.review_type.name,
+                location.location_name,
+                location.is_master ? 'Master' : `Duplicate #${location.duplicate_number}`,
+                location.response_count,
+                location.total_questions,
+                location.completion_percentage
+            ]);
+        });
+    });
+    
+    const detailSheet = XLSX.utils.aoa_to_sheet(detailData);
+    XLSX.utils.book_append_sheet(wb, detailSheet, 'Detailed Data');
+    
+    // Save file
+    XLSX.writeFile(wb, `${auditData.auditInfo.name}_Audit_Data.xlsx`);
+}
 
 function selectAllLocations() {
     document.querySelectorAll('.location-checkbox').forEach(checkbox => {
@@ -438,6 +963,71 @@ function downloadReport() {
     a.click();
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
+}
+
+// Test what data the AI can read
+async function testDataCollection() {
+    const testBtn = event.target;
+    const resultDiv = document.getElementById('dataTestResult');
+    
+    // Show loading
+    testBtn.disabled = true;
+    testBtn.innerHTML = '<i class="mdi mdi-loading mdi-spin me-1"></i>Testing...';
+    resultDiv.style.display = 'block';
+    resultDiv.innerHTML = '<div class="alert alert-info">Testing data collection...</div>';
+    
+    try {
+        const response = await fetch('{{ route("admin.reports.debug-data", $audit) }}', {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            }
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            let html = '<div class="alert alert-success"><h6>✅ Data Collection Test Results</h6>';
+            html += `<p><strong>Total Review Types:</strong> ${result.summary.total_review_types}</p>`;
+            html += `<p><strong>Total Responses Found:</strong> ${result.summary.total_responses}</p>`;
+            html += `<p><strong>Total Questions:</strong> ${result.summary.total_questions}</p>`;
+            
+            if (result.summary.total_responses > 0) {
+                html += '<h6 class="mt-3">📋 Preview of Available Data:</h6>';
+                result.review_types_preview.forEach((rt, index) => {
+                    html += `<div class="mb-2 p-2 border rounded">`;
+                    html += `<strong>${rt.name}</strong> (${rt.locations_count} locations, ${rt.templates_count} templates)<br>`;
+                    if (rt.templates_preview && rt.templates_preview.length > 0) {
+                        html += `<small class="text-info">Templates: ${rt.templates_preview.join(', ')}${rt.templates_count > 3 ? '...' : ''}</small><br>`;
+                    }
+                    if (rt.first_location_preview !== 'No locations') {
+                        html += `<small class="text-muted">Sample: ${rt.first_location_preview.name} - ${rt.first_location_preview.completion_rate} complete</small><br>`;
+                        if (rt.first_location_preview.first_section_preview !== 'No sections') {
+                            html += `<small class="text-info">Section: ${rt.first_location_preview.first_section_preview.name} (${rt.first_location_preview.first_section_preview.questions_count} questions)</small><br>`;
+                            html += `<small class="text-secondary">Template: ${rt.first_location_preview.first_section_preview.template_name}</small><br>`;
+                            html += `<small class="text-secondary">Sample Q: ${rt.first_location_preview.first_section_preview.sample_question}</small>`;
+                        }
+                    }
+                    html += `</div>`;
+                });
+                html += '<p class="mt-2 text-success"><strong>✅ AI can read this data and generate comprehensive reports!</strong></p>';
+            } else {
+                html += '<p class="text-warning">⚠️ No responses found. Please ensure audit data has been entered.</p>';
+            }
+            html += '</div>';
+            
+            resultDiv.innerHTML = html;
+        } else {
+            resultDiv.innerHTML = `<div class="alert alert-danger">❌ Error: ${result.error}</div>`;
+        }
+    } catch (error) {
+        console.error('Test failed:', error);
+        resultDiv.innerHTML = `<div class="alert alert-danger">❌ Test failed: ${error.message}</div>`;
+    } finally {
+        testBtn.disabled = false;
+        testBtn.innerHTML = '<i class="mdi mdi-database-search me-1"></i>Test Data Collection';
+    }
 }
 
 function copyToClipboard() {
