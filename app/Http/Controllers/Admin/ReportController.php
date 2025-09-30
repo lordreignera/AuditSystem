@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use PhpOffice\PhpWord\PhpWord;
 use PhpOffice\PhpWord\IOFactory;
+use App\Jobs\GenerateAiReportJob;
 
 class ReportController extends Controller
 {
@@ -132,7 +133,7 @@ class ReportController extends Controller
                 ]
             ], 500);
         }
-    }
+    } 
 
     /**
      * Debug endpoint to check what data is being collected
