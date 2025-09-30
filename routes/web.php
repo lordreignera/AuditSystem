@@ -101,6 +101,13 @@ Route::get('/debug-auditor', function() {
     return $html;
 });
 
+Route::get('/debug-log', function () {
+    $log = storage_path('logs/laravel.log');
+    if (file_exists($log)) {
+        return '<pre>' . htmlentities(implode("", array_slice(file($log), -50))) . '</pre>';
+    }
+    return 'Log file not found.';
+});
 
 
 Route::middleware([
@@ -246,21 +253,6 @@ Route::middleware([
             ->name('admin.audits.remove-duplicate');
         Route::get('audits/{audit}/load-sections', [\App\Http\Controllers\Admin\AuditManagement\AuditController::class, 'loadSections'])
             ->name('admin.audits.load-sections');
-        
-        // Excel Import/Export routes
-        //Route::get('audits/{audit}/export-attachment/{attachmentId}', [\App\Http\Controllers\Admin\ExcelImportExportController::class, 'exportAttachment'])
-            //->name('admin.audits.export-attachment');
-       // Route::get('audits/{audit}/download-blank-template/{reviewTypeId}', [\App\Http\Controllers\Admin\ExcelImportExportController::class, 'downloadBlankTemplate'])
-           // ->name('admin.audits.download-blank-template');
-       // Route::get('audits/{audit}/import-excel', [\App\Http\Controllers\Admin\ExcelImportExportController::class, 'showGeneralImportForm'])
-           // ->name('admin.audits.import-excel');
-       // Route::get('audits/{audit}/import-form/{reviewTypeId}', [\App\Http\Controllers\Admin\ExcelImportExportController::class, 'showImportForm'])
-           // ->name('admin.audits.show-import-form');
-       // Route::post('audits/{audit}/import-excel/{reviewTypeId}', [\App\Http\Controllers\Admin\ExcelImportExportController::class, 'importExcel'])
-           // ->name('admin.audits.process-import-excel');
-        //Route::post('audits/{audit}/preview-import/{reviewTypeId}', [\App\Http\Controllers\Admin\ExcelImportExportController::class, 'previewImport'])
-            //->name('admin.audits.preview-import');
-        
         // API routes for AJAX requests
         Route::get('api/templates/{template}', function(\App\Models\Template $template) {
             return $template->load('reviewType');
