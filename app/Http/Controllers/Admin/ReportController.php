@@ -110,15 +110,26 @@ class ReportController extends Controller
                 'selected_locations' => $request->selected_locations ?? 'all'
             ]);
             
+            // Ultra-aggressive cloud optimization based on report type
+            $reportType = $request->get('report_type');
+            $cloudTimeout = match($reportType) {
+                'executive_summary' => 20,      // Very fast for summaries
+                'compliance_check' => 25,       // Quick compliance check
+                'comparative_analysis' => 30,   // Medium for comparisons
+                'detailed_analysis' => 35,      // Longer but still cloud-safe
+                default => 20
+            };
+            
             // Cloud-optimized AI request options
             $options = [
-                'report_type' => $request->get('report_type'),
+                'report_type' => $reportType,
                 'include_table_analysis' => $includeTables,
                 'include_recommendations' => $includeRecommendations,
                 'performance_mode' => $forcePerformanceMode,
                 'cloud_environment' => true,
-                'max_questions_detail' => 25, // Reduced for cloud
-                'timeout' => 45, // Shorter timeout for cloud
+                'max_questions_detail' => $reportType === 'executive_summary' ? 10 : 20, // Very limited for cloud
+                'timeout' => $cloudTimeout,
+                'ultra_fast_mode' => true, // New ultra-fast mode
             ];
             
             \Log::info('Starting AI analysis', ['audit_id' => $audit->id, 'options' => $options]);
@@ -378,13 +389,17 @@ class ReportController extends Controller
         
         $attachments = $attachmentsQuery->get();
 
-        // Limit processing for cloud performance
-        if ($performanceMode && $attachments->count() > 3) {
-            \Log::info('Limiting attachments for cloud performance', [
-                'original_count' => $attachments->count(),
-                'limited_to' => 3
-            ]);
-            $attachments = $attachments->take(3);
+        // Ultra-aggressive limiting for cloud hosting
+        if ($performanceMode) {
+            $maxAttachments = 2; // Even more aggressive for cloud
+            
+            if ($attachments->count() > $maxAttachments) {
+                \Log::info('Ultra-limiting attachments for cloud performance', [
+                    'original_count' => $attachments->count(),
+                    'limited_to' => $maxAttachments
+                ]);
+                $attachments = $attachments->take($maxAttachments);
+            }
         }
 
         // Group attachments by review type
@@ -810,15 +825,17 @@ class ReportController extends Controller
                 'messages' => [
                     [
                         'role' => 'system',
-                        'content' => 'You are an expert healthcare auditor and data analyst. Generate intelligent, data-driven audit reports with actionable insights. Focus on patterns, compliance gaps, and practical recommendations based on the provided metrics.'
+                        'content' => $options['ultra_fast_mode'] ?? false ? 
+                            'You are a healthcare audit expert. Provide concise, actionable audit insights. Be brief but comprehensive.' :
+                            'You are an expert healthcare auditor and data analyst. Generate intelligent, data-driven audit reports with actionable insights. Focus on patterns, compliance gaps, and practical recommendations based on the provided metrics.'
                     ],
                     [
                         'role' => 'user',
                         'content' => $prompt
                     ]
                 ],
-                'max_tokens' => $cloudEnvironment ? 1500 : ($performanceMode ? 2000 : 3000), // Cloud-optimized tokens
-                'temperature' => 0.1 // Lower temperature for more focused responses
+                'max_tokens' => $this->getCloudOptimizedTokens($options),
+                'temperature' => 0.05 // Ultra-low temperature for fastest processing
             ]);
         } catch (\Exception $e) {
             $errorMessage = $e->getMessage();
@@ -877,6 +894,39 @@ class ReportController extends Controller
     }
 
     /**
+     * Get cloud-optimized token limits based on report type and environment
+     */
+    private function getCloudOptimizedTokens($options)
+    {
+        $cloudEnvironment = $options['cloud_environment'] ?? false;
+        $ultraFastMode = $options['ultra_fast_mode'] ?? false;
+        $reportType = $options['report_type'] ?? 'executive_summary';
+        
+        if ($ultraFastMode) {
+            return match($reportType) {
+                'executive_summary' => 800,      // Very concise
+                'compliance_check' => 1000,      // Brief compliance
+                'comparative_analysis' => 1200,  // Quick comparison
+                'detailed_analysis' => 1400,     // Limited detail
+                default => 800
+            };
+        }
+        
+        if ($cloudEnvironment) {
+            return match($reportType) {
+                'executive_summary' => 1200,
+                'compliance_check' => 1400,
+                'comparative_analysis' => 1600,
+                'detailed_analysis' => 1800,
+                default => 1200
+            };
+        }
+        
+        // Local/non-cloud defaults
+        return 3000;
+    }
+
+    /**
      * Build comprehensive transparent AI prompt with full data visibility
      */
     private function buildSmartPromptForAI($auditData, $options)
@@ -884,6 +934,13 @@ class ReportController extends Controller
         $reportType = $options['report_type'];
         $includeRecommendations = $options['include_recommendations'] ?? false;
         $includeTableAnalysis = $options['include_table_analysis'] ?? false;
+        $ultraFastMode = $options['ultra_fast_mode'] ?? false;
+        $cloudEnvironment = $options['cloud_environment'] ?? false;
+        
+        // Ultra-fast mode: Minimal prompt for cloud speed
+        if ($ultraFastMode) {
+            return $this->buildUltraFastPrompt($auditData, $options);
+        }
         
         $prompt = "You are an expert healthcare auditor and data analyst. Analyze this audit data and provide intelligent insights with complete transparency, showing all data sources.\n\n";
         
@@ -1073,6 +1130,51 @@ class ReportController extends Controller
         $prompt .= "  * Trends and patterns found in tabular data\n";
         $prompt .= "- A comprehensive 'Data Sources' section listing all audit components analyzed\n";
         $prompt .= "\nDo NOT truncate or abbreviate the template/section structure. Show the complete data architecture including table analysis.\n";
+        
+        return $prompt;
+    }
+
+    /**
+     * Build ultra-fast prompt for cloud hosting
+     */
+    private function buildUltraFastPrompt($auditData, $options)
+    {
+        $reportType = $options['report_type'];
+        
+        // Minimal prompt for maximum cloud speed
+        $prompt = "Healthcare Audit Analysis - Be concise and actionable.\n\n";
+        
+        // Essential context only
+        $prompt .= "AUDIT: {$auditData['audit_info']['name']} ({$auditData['audit_info']['country']})\n";
+        $prompt .= "COMPLETION: " . round(($auditData['total_responses'] / max($auditData['total_questions'], 1)) * 100, 1) . "% ({$auditData['total_responses']}/{$auditData['total_questions']})\n\n";
+        
+        // Summary data only - no detailed questions
+        $prompt .= "LOCATIONS:\n";
+        foreach ($auditData['review_types_data'] as $reviewType) {
+            $prompt .= "• {$reviewType['review_type_name']}\n";
+            foreach ($reviewType['locations'] as $location) {
+                $prompt .= "  - {$location['location_name']}: {$location['response_summary']['completion_percentage']}% complete\n";
+            }
+        }
+        
+        // Minimal requirements based on report type
+        $prompt .= "\nGENERATE: ";
+        switch ($reportType) {
+            case 'executive_summary':
+                $prompt .= "Executive summary with key findings and 3 main recommendations.";
+                break;
+            case 'compliance_check':
+                $prompt .= "Compliance status with critical gaps and required actions.";
+                break;
+            case 'comparative_analysis':
+                $prompt .= "Location comparison with performance differences and best practices.";
+                break;
+            case 'detailed_analysis':
+                $prompt .= "Detailed findings by location with specific improvement areas.";
+                break;
+        }
+        
+        $prompt .= "\nFormat: Clear headings, bullet points, actionable insights. Keep concise.";
         
         return $prompt;
     }
