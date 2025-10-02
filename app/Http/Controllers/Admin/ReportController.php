@@ -309,7 +309,7 @@ class ReportController extends Controller
     }
 
     /**
-     * Collect comprehensive audit data for AI processing with detailed template structure
+     * Collect comprehensive audit data for AI processing with per-location question counting
      */
     private function collectAuditData(Audit $audit, array $selectedLocations = [])
     {
@@ -325,10 +325,10 @@ class ReportController extends Controller
             ],
             'review_types_data' => [],
             'total_responses' => 0,
-            'total_questions' => 0,
+            'total_questions' => 0, // This will be the sum of questions across all locations
         ];
 
-        // Get attachments (locations) directly since audit->reviewTypes might be empty
+        // Get attachments (locations)
         $attachmentsQuery = AuditReviewTypeAttachment::where('audit_id', $audit->id)
             ->with(['reviewType.templates.sections.questions', 'responses.question']);
             
@@ -369,12 +369,24 @@ class ReportController extends Controller
                         'total_responses' => 0,
                         'answered_questions' => 0,
                         'unanswered_questions' => 0,
-                        'completion_percentage' => 0
+                        'completion_percentage' => 0,
+                        'location_total_questions' => 0 // Questions specific to this location
                     ]
                 ];
 
-                // Get all templates for this review type (not just the first one)
-                $templates = $reviewType->templates()->with('sections.questions')->get();
+                // Get all templates for this review type (prefer audit-specific, fallback to default)
+                $templates = $reviewType->templates()
+                    ->where('audit_id', $audit->id) // First try audit-specific templates
+                    ->with('sections.questions')
+                    ->get();
+                
+                // If no audit-specific templates found, use default templates
+                if ($templates->isEmpty()) {
+                    $templates = $reviewType->templates()
+                        ->whereNull('audit_id') // Fallback to default templates
+                        ->with('sections.questions')
+                        ->get();
+                }
                 
                 if ($templates->count() > 0) {
                     // Process each template
@@ -391,6 +403,10 @@ class ReportController extends Controller
 
                             // Process each question in the section
                             foreach ($section->questions()->orderBy('order')->get() as $question) {
+                                // Count this question for this location
+                                $locationData['response_summary']['location_total_questions']++;
+                                $auditData['total_questions']++; // Count for overall total (per location)
+
                                 // Get response for this question and location
                                 $response = Response::where('audit_id', $audit->id)
                                     ->where('attachment_id', $attachment->id)
@@ -423,7 +439,6 @@ class ReportController extends Controller
                                 }
 
                                 $sectionData['questions_data'][] = $questionData;
-                                $auditData['total_questions']++;
                             }
 
                             // Only add section if it has questions
@@ -433,11 +448,10 @@ class ReportController extends Controller
                         }
                     }
 
-                    // Calculate completion percentage
-                    $totalQuestions = $locationData['response_summary']['answered_questions'] + $locationData['response_summary']['unanswered_questions'];
-                    if ($totalQuestions > 0) {
+                    // Calculate completion percentage based on this location's questions
+                    if ($locationData['response_summary']['location_total_questions'] > 0) {
                         $locationData['response_summary']['completion_percentage'] = round(
-                            ($locationData['response_summary']['answered_questions'] / $totalQuestions) * 100, 1
+                            ($locationData['response_summary']['answered_questions'] / $locationData['response_summary']['location_total_questions']) * 100, 1
                         );
                     }
 
@@ -447,6 +461,16 @@ class ReportController extends Controller
                     $responses = $attachment->responses()->with('question.section')->get();
                     $locationData['response_summary']['total_responses'] = $responses->count();
                     $auditData['total_responses'] += $responses->count();
+                    
+                    // Count unique questions for this location
+                    $uniqueQuestionIdsForLocation = [];
+                    foreach ($responses as $response) {
+                        if ($response->question && !in_array($response->question->id, $uniqueQuestionIdsForLocation)) {
+                            $uniqueQuestionIdsForLocation[] = $response->question->id;
+                            $locationData['response_summary']['location_total_questions']++;
+                            $auditData['total_questions']++; // Count for overall total (per location)
+                        }
+                    }
                     
                     // Group responses by section
                     $responsesBySection = $responses->groupBy(function($response) {
@@ -477,20 +501,39 @@ class ReportController extends Controller
                                 ];
                                 
                                 $sectionData['questions_data'][] = $questionData;
-                                $auditData['total_questions']++;
+                                $locationData['response_summary']['answered_questions']++;
                             }
                         }
                         
                         $locationData['sections_data'][] = $sectionData;
+                    }
+                    
+                    // Calculate completion percentage for this location
+                    if ($locationData['response_summary']['location_total_questions'] > 0) {
+                        $locationData['response_summary']['completion_percentage'] = round(
+                            ($locationData['response_summary']['answered_questions'] / $locationData['response_summary']['location_total_questions']) * 100, 1
+                        );
                     }
                 }
 
                 $reviewTypeData['locations'][] = $locationData;
             }
 
-            // Add template information for all templates
-            if ($templates && $templates->count() > 0) {
-                foreach ($templates as $template) {
+            // Add template information for the templates we actually used (audit-specific or default)
+            $usedTemplates = $reviewType->templates()
+                ->where('audit_id', $audit->id)
+                ->with('sections.questions')
+                ->get();
+                
+            if ($usedTemplates->isEmpty()) {
+                $usedTemplates = $reviewType->templates()
+                    ->whereNull('audit_id')
+                    ->with('sections.questions')
+                    ->get();
+            }
+                
+            if ($usedTemplates && $usedTemplates->count() > 0) {
+                foreach ($usedTemplates as $template) {
                     $reviewTypeData['templates'][] = [
                         'template_name' => $template->name,
                         'template_description' => $template->description ?? '',
@@ -560,53 +603,107 @@ class ReportController extends Controller
     }
 
     /**
-     * Format table response for AI analysis
+     * Format table response for AI analysis with enhanced structure
      */
     private function formatTableResponseForAI($question, $answer, $auditNote)
     {
-        if (!is_array($answer) || empty($answer)) {
+        if (!$answer) {
             $note = !empty($auditNote) ? " [Audit Note: " . $auditNote . "]" : "";
             return "No table data provided" . $note;
         }
 
-        $formatted = "\nTable Data:\n";
-        
-        // Get table structure from question
-        $tableStructure = $question->parseTableStructure();
-        
-        if ($tableStructure && !empty($tableStructure[0])) {
-            // Use headers from table structure
-            $headers = $tableStructure[0];
-            $formatted .= "Headers: " . implode(' | ', $headers) . "\n";
-            
-            // Format each row of data
-            $rowIndex = 1;
-            foreach ($answer as $row) {
-                if (is_array($row) && !empty(array_filter($row))) {
-                    $formatted .= "Row {$rowIndex}: ";
-                    foreach ($row as $cellIndex => $cellValue) {
-                        $header = $headers[$cellIndex] ?? "Col" . ($cellIndex + 1);
-                        if (!empty($cellValue)) {
-                            $formatted .= "{$header}: {$cellValue} | ";
-                        }
-                    }
-                    $formatted = rtrim($formatted, ' | ') . "\n";
-                    $rowIndex++;
-                }
-            }
-        } else {
-            // Fallback formatting
-            foreach ($answer as $rowIndex => $row) {
-                if (is_array($row) && !empty(array_filter($row))) {
-                    $formatted .= "Row " . ($rowIndex + 1) . ": " . implode(' | ', array_filter($row)) . "\n";
-                }
+        // Handle JSON string responses
+        if (is_string($answer)) {
+            $decodedAnswer = json_decode($answer, true);
+            if (json_last_error() === JSON_ERROR_NONE) {
+                $answer = $decodedAnswer;
             }
         }
 
+        // Extract table data from the response structure
+        $tableData = null;
+        if (is_array($answer)) {
+            // Check if response has 'value' key (common format)
+            if (isset($answer['value']) && is_array($answer['value'])) {
+                $tableData = $answer['value'];
+            } else {
+                // Direct array format
+                $tableData = $answer;
+            }
+        }
+
+        if (!$tableData || empty($tableData)) {
+            $note = !empty($auditNote) ? " [Audit Note: " . $auditNote . "]" : "";
+            return "Empty table data" . $note;
+        }
+
+        $formatted = "\n=== TABLE DATA ANALYSIS ===\n";
+        
+        // Get table structure and headers from question options
+        $tableOptions = $question->options;
+        if (is_string($tableOptions)) {
+            $tableOptions = json_decode($tableOptions, true);
+        }
+        
+        $headers = [];
+        if (isset($tableOptions['headers']) && is_array($tableOptions['headers'])) {
+            $headers = $tableOptions['headers'];
+        } elseif (isset($tableOptions['rows']) && is_array($tableOptions['rows']) && !empty($tableOptions['rows'])) {
+            // Use first row as headers if available
+            $headers = $tableOptions['rows'][0] ?? [];
+        }
+
+        // If we have headers, show them
+        if (!empty($headers)) {
+            $formatted .= "TABLE HEADERS: " . implode(' | ', array_filter($headers)) . "\n";
+            $formatted .= str_repeat('-', 60) . "\n";
+        }
+
+        // Format each row of data with meaningful structure
+        $rowCount = 0;
+        foreach ($tableData as $rowIndex => $row) {
+            if (!is_array($row)) continue;
+            
+            // Skip empty rows (all cells empty or null)
+            $hasData = false;
+            foreach ($row as $cell) {
+                if (!empty($cell) && $cell !== "" && $cell !== null) {
+                    $hasData = true;
+                    break;
+                }
+            }
+            
+            if (!$hasData) continue;
+            
+            $rowCount++;
+            $formatted .= "ROW {$rowCount}:\n";
+            
+            // Map cells to headers if available
+            foreach ($row as $cellIndex => $cellValue) {
+                if (!empty($cellValue) && $cellValue !== "" && $cellValue !== null) {
+                    $headerName = isset($headers[$cellIndex]) && !empty($headers[$cellIndex]) 
+                        ? $headers[$cellIndex] 
+                        : "Column " . ($cellIndex + 1);
+                    $formatted .= "  {$headerName}: {$cellValue}\n";
+                }
+            }
+            $formatted .= "\n";
+        }
+
+        // Add summary statistics
+        $totalRows = count($tableData);
+        $dataRows = $rowCount;
+        $formatted .= "TABLE SUMMARY:\n";
+        $formatted .= "- Total rows in response: {$totalRows}\n";
+        $formatted .= "- Rows with data: {$dataRows}\n";
+        $formatted .= "- Completion rate: " . round(($dataRows / max($totalRows, 1)) * 100, 1) . "%\n";
+
         // Add audit note if present
         if (!empty($auditNote)) {
-            $formatted .= "[Audit Note: " . $auditNote . "]\n";
+            $formatted .= "\n[AUDIT NOTE: " . $auditNote . "]\n";
         }
+
+        $formatted .= "=== END TABLE DATA ===\n";
 
         return $formatted;
     }
@@ -626,41 +723,68 @@ class ReportController extends Controller
             throw new \Exception('DeepSeek API key is not configured. Please add DEEPSEEK_API_KEY to your .env file.');
         }
 
-        $prompt = $this->buildPromptForAI($auditData, $options);
+        // Use smart prompt for faster, more intelligent analysis
+        $prompt = $this->buildSmartPromptForAI($auditData, $options);
+        
+        // Log prompt size for monitoring
+        $promptSize = strlen($prompt);
+        \Log::info('AI Prompt Size', [
+            'size_bytes' => $promptSize,
+            'size_kb' => round($promptSize / 1024, 2),
+            'report_type' => $options['report_type'],
+            'total_questions' => $auditData['total_questions'],
+            'total_responses' => $auditData['total_responses']
+        ]);
 
         try {
             $verifySSL = config('services.deepseek.verify_ssl', false);
 
-            // Increase timeout to 300 seconds (5 minutes)
+            // Use extended timeout for comprehensive data analysis
             $response = Http::withHeaders([
                 'Authorization' => 'Bearer ' . $apiKey,
                 'Content-Type' => 'application/json'
             ])
             ->withOptions([
                 'verify' => $verifySSL,
-                'timeout' => 120
+                'timeout' => 180  // Increased to 3 minutes for comprehensive analysis
             ])
-            ->timeout(120)
+            ->timeout(180)  // Increased to 3 minutes
             ->post('https://api.deepseek.com/v1/chat/completions', [
                 'model' => 'deepseek-chat',
                 'messages' => [
                     [
                         'role' => 'system',
-                        'content' => 'You are an expert audit report analyst. Generate comprehensive, professional audit reports based on the provided data.'
+                        'content' => 'You are an expert healthcare auditor and data analyst. Generate intelligent, data-driven audit reports with actionable insights. Focus on patterns, compliance gaps, and practical recommendations based on the provided metrics.'
                     ],
                     [
                         'role' => 'user',
                         'content' => $prompt
                     ]
                 ],
-                'max_tokens' => 4000,
-                'temperature' => 0.3
+                'max_tokens' => 4000,  // Increased for more detailed reports with complete structure
+                'temperature' => 0.2
             ]);
         } catch (\Exception $e) {
-            if (strpos($e->getMessage(), 'SSL certificate') !== false) {
+            $errorMessage = $e->getMessage();
+            
+            // Handle specific error types
+            if (strpos($errorMessage, 'SSL certificate') !== false) {
                 throw new \Exception('SSL certificate error. This is common in development environments. The request has been configured to bypass SSL verification.');
             }
-            throw new \Exception('Network error: ' . $e->getMessage());
+            
+            // Handle timeout errors specifically
+            if (strpos($errorMessage, 'timeout') !== false || strpos($errorMessage, 'Operation timed out') !== false) {
+                \Log::warning('AI API Timeout', [
+                    'prompt_size_kb' => round(strlen($prompt) / 1024, 2),
+                    'timeout_duration' => '180 seconds',
+                    'report_type' => $options['report_type'],
+                    'error' => $errorMessage
+                ]);
+                
+                throw new \Exception('The comprehensive analysis is taking longer than expected due to the large amount of data being processed. This indicates the system is analyzing all ' . $auditData['total_questions'] . ' questions across all templates and sections. Please try again, or consider generating a shorter Executive Summary report first.');
+            }
+            
+            throw new \Exception('Network error: ' . $errorMessage);
         }
 
         if (!$response->successful()) {
@@ -687,9 +811,210 @@ class ReportController extends Controller
     }
 
     /**
-     * Build comprehensive AI prompt based on detailed audit data and options
+     * Build comprehensive transparent AI prompt with full data visibility
      */
-    private function buildPromptForAI($auditData, $options)
+    private function buildSmartPromptForAI($auditData, $options)
+    {
+        $reportType = $options['report_type'];
+        $includeRecommendations = $options['include_recommendations'] ?? false;
+        $includeTableAnalysis = $options['include_table_analysis'] ?? false;
+        
+        $prompt = "You are an expert healthcare auditor and data analyst. Analyze this audit data and provide intelligent insights with complete transparency, showing all data sources.\n\n";
+        
+        // Basic audit context
+        $prompt .= "AUDIT CONTEXT:\n";
+        $prompt .= "- Audit: {$auditData['audit_info']['name']}\n";
+        $prompt .= "- Country: {$auditData['audit_info']['country']}\n";
+        $prompt .= "- Total Questions: {$auditData['total_questions']}\n";
+        $prompt .= "- Total Responses: {$auditData['total_responses']}\n";
+        $prompt .= "- Completion Rate: " . round(($auditData['total_responses'] / max($auditData['total_questions'], 1)) * 100, 1) . "%\n\n";
+        
+        // For detailed analysis, include COMPLETE data structure with smart optimization
+        if ($reportType === 'detailed_analysis') {
+            $prompt .= "COMPLETE AUDIT DATA STRUCTURE FOR FULL ANALYSIS:\n";
+            
+            foreach ($auditData['review_types_data'] as $reviewType) {
+                $prompt .= "═══════════════════════════════════════\n";
+                $prompt .= "REVIEW TYPE: {$reviewType['review_type_name']}\n";
+                $prompt .= "Description: {$reviewType['review_type_description']}\n";
+                
+                // Show all templates with complete structure
+                if (!empty($reviewType['templates'])) {
+                    $prompt .= "\nCOMPLETE TEMPLATES STRUCTURE:\n";
+                    foreach ($reviewType['templates'] as $template) {
+                        $prompt .= "• {$template['template_name']} - {$template['total_sections']} sections, {$template['total_questions']} questions\n";
+                    }
+                }
+                
+                foreach ($reviewType['locations'] as $location) {
+                    $prompt .= "\n─────────────────────────────────────\n";
+                    $prompt .= "LOCATION: {$location['location_name']}\n";
+                    $prompt .= "Type: " . ($location['is_master'] ? 'Master Location' : 'Duplicate Location') . "\n";
+                    $totalQuestions = $location['response_summary']['location_total_questions'] ?? ($location['response_summary']['answered_questions'] + $location['response_summary']['unanswered_questions']);
+                    $prompt .= "Overall Completion: {$location['response_summary']['completion_percentage']}% ({$location['response_summary']['answered_questions']}/{$totalQuestions})\n\n";
+                    
+                    // Show ALL sections and questions with optimized formatting
+                    foreach ($location['sections_data'] as $section) {
+                        $prompt .= "TEMPLATE: {$section['template_name']}\n";
+                        $prompt .= "SECTION: {$section['section_name']}\n";
+                        if (!empty($section['section_description'])) {
+                            $prompt .= "Description: {$section['section_description']}\n";
+                        }
+                        $prompt .= "Order: {$section['section_order']}\n";
+                        $prompt .= "Questions in section: " . count($section['questions_data']) . "\n\n";
+                        
+                        // Show ALL questions with smart response formatting
+                        foreach ($section['questions_data'] as $qIndex => $question) {
+                            $prompt .= "Q{$question['order']}: {$question['question_text']}\n";
+                            $prompt .= "Type: {$question['response_type']} | Required: " . ($question['is_required'] ? 'Yes' : 'No') . "\n";
+                            
+                            if (!empty($question['response'])) {
+                                // Smart formatting based on response type
+                                if ($question['response_type'] === 'table') {
+                                    // For tables, show structured summary instead of full data to save space
+                                    $responseText = $question['formatted_answer'] ?? $question['response'];
+                                    if (is_array($question['response'])) {
+                                        $responseText = "[TABLE DATA - See formatted analysis]";
+                                    }
+                                    $prompt .= "ANSWER: {$responseText}\n";
+                                } else {
+                                    // For non-table responses, show full content
+                                    $responseText = is_array($question['response']) ? implode(', ', $question['response']) : $question['response'];
+                                    // Limit very long responses to prevent timeout
+                                    if (strlen($responseText) > 500) {
+                                        $responseText = substr($responseText, 0, 500) . "... [TRUNCATED - Full response available for analysis]";
+                                    }
+                                    $prompt .= "ANSWER: {$responseText}\n";
+                                }
+                                
+                                if (!empty($question['audit_note'])) {
+                                    $prompt .= "AUDIT NOTE: {$question['audit_note']}\n";
+                                }
+                            } else {
+                                $prompt .= "ANSWER: [NO RESPONSE]\n";
+                            }
+                            $prompt .= "---\n";
+                        }
+                        $prompt .= "\n";
+                    }
+                }
+            }
+            
+            // Complete data analysis note with optimization info
+            $prompt .= "\n[COMPLETE DATA SET: This includes ALL review types, ALL locations, ALL templates, ALL sections, and ALL questions with their responses. Table responses are formatted for analysis efficiency while maintaining full data integrity.]\n\n";
+        } else {
+            // For other report types, use summary with key examples
+            $prompt .= "AUDIT DATA SUMMARY:\n";
+            foreach ($auditData['review_types_data'] as $reviewType) {
+                $prompt .= "REVIEW TYPE: {$reviewType['review_type_name']}\n";
+                
+                foreach ($reviewType['locations'] as $location) {
+                    $totalQuestions = ($location['response_summary']['answered_questions'] ?? 0) + ($location['response_summary']['unanswered_questions'] ?? 0);
+                    $prompt .= "• {$location['location_name']}: {$location['response_summary']['completion_percentage']}% complete ({$location['response_summary']['answered_questions']}/{$totalQuestions})\n";
+                    
+                    // Show a few key questions for context
+                    if (!empty($location['sections_data'])) {
+                        $questionCount = 0;
+                        foreach ($location['sections_data'] as $section) {
+                            foreach ($section['questions_data'] as $question) {
+                                if ($questionCount >= 3) break 2; // Limit for summary reports
+                                
+                                $prompt .= "  - {$question['question_text']}: ";
+                                if (!empty($question['response'])) {
+                                    $responseText = is_array($question['response']) ? implode(', ', $question['response']) : $question['response'];
+                                    $prompt .= substr($responseText, 0, 50) . (strlen($responseText) > 50 ? '...' : '') . "\n";
+                                } else {
+                                    $prompt .= "[No Response]\n";
+                                }
+                                $questionCount++;
+                            }
+                        }
+                    }
+                }
+                $prompt .= "\n";
+            }
+        }
+        
+        // Analysis instructions for complete transparency including table data
+        $prompt .= "\nANALYSIS REQUIREMENTS FOR COMPLETE TRANSPARENCY:\n";
+        $prompt .= "Your report MUST include:\n";
+        $prompt .= "1. **DATA TRANSPARENCY SECTION**: Show the complete data structure you analyzed:\n";
+        $prompt .= "   - List ALL templates with their names and question counts\n";
+        $prompt .= "   - List ALL sections within each template\n";
+        $prompt .= "   - Show total questions per template and per section\n";
+        $prompt .= "   - Display completion rates per location for each template\n";
+        $prompt .= "2. **DETAILED FINDINGS**: Reference specific questions by number and text\n";
+        $prompt .= "3. **SECTION-BY-SECTION REVIEW**: Analyze each section with its questions and responses\n";
+        $prompt .= "4. **TABLE DATA ANALYSIS**: For table-format questions, analyze the structured data:\n";
+        $prompt .= "   - Summarize table contents and completion patterns\n";
+        $prompt .= "   - Identify missing data in table rows/columns\n";
+        $prompt .= "   - Analyze trends and patterns in tabular responses\n";
+        $prompt .= "   - Reference specific table headers and row data\n";
+        $prompt .= "5. **EVIDENCE-BASED CONCLUSIONS**: Cite exact question numbers and response data\n";
+        $prompt .= "6. **ACTIONABLE RECOMMENDATIONS**: Based on specific gaps found in the complete dataset\n\n";
+        
+        switch ($reportType) {
+            case 'executive_summary':
+                $prompt .= "EXECUTIVE SUMMARY FORMAT:\n";
+                $prompt .= "- Overview of data analyzed (mention templates and sections covered)\n";
+                $prompt .= "- Key findings with specific completion percentages\n";
+                $prompt .= "- Critical issues with question/section references\n";
+                $prompt .= "- Strategic recommendations with data justification\n";
+                break;
+                
+            case 'detailed_analysis':
+                $prompt .= "DETAILED ANALYSIS FORMAT:\n";
+                $prompt .= "- **COMPLETE DATA STRUCTURE**: List ALL templates analyzed with their full section breakdown and question counts\n";
+                $prompt .= "- **TEMPLATE-BY-TEMPLATE BREAKDOWN**: Show each template's sections and their specific question coverage\n";
+                $prompt .= "- **LOCATION-BY-LOCATION ANALYSIS**: Show completion rates per location for each template/section\n";
+                $prompt .= "- **SECTION-BY-SECTION REVIEW**: Analyze performance in each section with specific question references\n";
+                $prompt .= "- **TABLE DATA ANALYSIS**: For questions with table responses, provide detailed analysis:\n";
+                $prompt .= "  * Summarize table structure (headers, rows, data patterns)\n";
+                $prompt .= "  * Identify data completeness in table cells\n";
+                $prompt .= "  * Analyze trends across table rows/columns\n";
+                $prompt .= "  * Highlight critical missing data in tables\n";
+                $prompt .= "- **QUESTION ANALYSIS**: Highlight specific questions with poor response rates or concerning answers\n";
+                $prompt .= "- **COMPLIANCE GAPS**: Identify specific areas needing attention with exact question numbers and section names\n";
+                $prompt .= "- **RECOMMENDATIONS**: Provide actionable steps for each identified issue with template/section references\n";
+                break;
+                
+            case 'compliance_check':
+                $prompt .= "COMPLIANCE CHECK FORMAT:\n";
+                $prompt .= "- Data coverage assessment (what templates/sections were reviewed)\n";
+                $prompt .= "- Compliance scoring based on completion rates and response quality\n";
+                $prompt .= "- Non-compliance areas with specific question references\n";
+                $prompt .= "- Risk assessment with evidence from responses\n";
+                break;
+                
+            case 'comparative_analysis':
+                $prompt .= "COMPARATIVE ANALYSIS FORMAT:\n";
+                $prompt .= "- Data comparison framework (what was compared across locations)\n";
+                $prompt .= "- Performance differences with specific metrics\n";
+                $prompt .= "- Best practices identified from high-performing areas\n";
+                $prompt .= "- Standardization needs with specific examples\n";
+                break;
+        }
+        
+        $prompt .= "\n**CRITICAL REQUIREMENT**: Your analysis must show COMPLETE TRANSPARENCY of the audit structure including table data. Users need to see:\n";
+        $prompt .= "- The exact templates you analyzed (with names and question counts)\n";
+        $prompt .= "- All sections within each template (with section names and question counts)\n";
+        $prompt .= "- Specific question numbers and text when referencing findings\n";
+        $prompt .= "- Response patterns and completion rates per template/section\n";
+        $prompt .= "- **TABLE DATA INSIGHTS**: For table-format questions, show:\n";
+        $prompt .= "  * Table structure analysis (headers, row/column patterns)\n";
+        $prompt .= "  * Data completeness assessment per table\n";
+        $prompt .= "  * Specific missing data points in table cells\n";
+        $prompt .= "  * Trends and patterns found in tabular data\n";
+        $prompt .= "- A comprehensive 'Data Sources' section listing all audit components analyzed\n";
+        $prompt .= "\nDo NOT truncate or abbreviate the template/section structure. Show the complete data architecture including table analysis.\n";
+        
+        return $prompt;
+    }
+
+    /**
+     * Build comprehensive AI prompt based on detailed audit data and options (LEGACY - for fallback)
+     */
+    private function buildDetailedPromptForAI($auditData, $options)
     {
         $reportType = $options['report_type'];
         $includeRecommendations = $options['include_recommendations'] ?? false;
