@@ -57,6 +57,14 @@ class ReportController extends Controller
      */
     public function generateAiReport(Request $request, Audit $audit)
     {
+        // Cloud-optimized settings for Laravel Cloud hosting
+        @ini_set('max_execution_time', 180); // 3 minutes for cloud
+        @ini_set('memory_limit', '256M'); // Conservative for cloud
+        @set_time_limit(180);
+        
+        // Force performance mode for cloud hosting
+        $forcePerformanceMode = true;
+        
         $request->validate([
             'report_type' => 'required|in:executive_summary,detailed_analysis,compliance_check,comparative_analysis',
             'selected_locations' => 'array',
@@ -78,28 +86,49 @@ class ReportController extends Controller
                 'include_recommendations' => $includeRecommendations
             ]);
 
-            // Collect comprehensive audit data using new method
-            $auditData = $this->collectAuditData($audit, $request->selected_locations ?? []);
+            // Cloud-optimized data collection with performance mode
+            \Log::info('Starting cloud-optimized AI report generation', [
+                'audit_id' => $audit->id,
+                'performance_mode' => $forcePerformanceMode,
+                'environment' => app()->environment()
+            ]);
+            
+            $startTime = microtime(true);
+            
+            // Force performance mode for cloud hosting
+            $auditData = $this->collectAuditData($audit, $request->selected_locations ?? [], $forcePerformanceMode);
+            
+            $dataCollectionTime = round(microtime(true) - $startTime, 2);
             
             // Log what data we collected for debugging
-            \Log::info('AI Report Data Collection', [
+            \Log::info('AI Report Data Collection Completed', [
                 'audit_id' => $audit->id,
-                'audit_name' => $audit->name,
+                'collection_time' => $dataCollectionTime . 's',
                 'review_types_count' => count($auditData['review_types_data'] ?? []),
                 'total_responses' => $auditData['total_responses'] ?? 0,
                 'total_questions' => $auditData['total_questions'] ?? 0,
                 'selected_locations' => $request->selected_locations ?? 'all'
             ]);
             
-            // Prepare AI request options
+            // Cloud-optimized AI request options
             $options = [
                 'report_type' => $request->get('report_type'),
                 'include_table_analysis' => $includeTables,
                 'include_recommendations' => $includeRecommendations,
+                'performance_mode' => $forcePerformanceMode,
+                'cloud_environment' => true,
+                'max_questions_detail' => 25, // Reduced for cloud
+                'timeout' => 45, // Shorter timeout for cloud
             ];
+            
+            \Log::info('Starting AI analysis', ['audit_id' => $audit->id, 'options' => $options]);
+            $aiStartTime = microtime(true);
             
             // Generate AI report
             $aiReport = $this->callDeepSeekAI($auditData, $options);
+            
+            $aiTime = round(microtime(true) - $aiStartTime, 2);
+            \Log::info('AI analysis completed', ['audit_id' => $audit->id, 'ai_time' => $aiTime . 's']);
             
             // Save the generated report
             $reportId = $this->saveGeneratedReport($audit, $aiReport, $request->all());
@@ -309,9 +338,9 @@ class ReportController extends Controller
     }
 
     /**
-     * Collect comprehensive audit data for AI processing with per-location question counting
+     * Collect audit data optimized for cloud hosting
      */
-    private function collectAuditData(Audit $audit, array $selectedLocations = [])
+    private function collectAuditData(Audit $audit, array $selectedLocations = [], $performanceMode = false)
     {
         $auditData = [
             'audit_info' => [
@@ -328,15 +357,35 @@ class ReportController extends Controller
             'total_questions' => 0, // This will be the sum of questions across all locations
         ];
 
-        // Get attachments (locations)
-        $attachmentsQuery = AuditReviewTypeAttachment::where('audit_id', $audit->id)
-            ->with(['reviewType.templates.sections.questions', 'responses.question']);
+        // Cloud-optimized data collection with performance mode
+        if ($performanceMode) {
+            \Log::info('Using performance mode for cloud hosting', ['audit_id' => $audit->id]);
+            
+            // Lighter query for performance mode
+            $attachmentsQuery = AuditReviewTypeAttachment::where('audit_id', $audit->id)
+                ->with(['reviewType', 'responses' => function($query) {
+                    $query->limit(50); // Limit responses for cloud performance
+                }]);
+        } else {
+            // Full query for detailed analysis
+            $attachmentsQuery = AuditReviewTypeAttachment::where('audit_id', $audit->id)
+                ->with(['reviewType.templates.sections.questions', 'responses.question']);
+        }
             
         if (!empty($selectedLocations)) {
             $attachmentsQuery->whereIn('id', $selectedLocations);
         }
         
         $attachments = $attachmentsQuery->get();
+
+        // Limit processing for cloud performance
+        if ($performanceMode && $attachments->count() > 3) {
+            \Log::info('Limiting attachments for cloud performance', [
+                'original_count' => $attachments->count(),
+                'limited_to' => 3
+            ]);
+            $attachments = $attachments->take(3);
+        }
 
         // Group attachments by review type
         $reviewTypeGroups = $attachments->groupBy('review_type_id');
@@ -713,6 +762,10 @@ class ReportController extends Controller
      */
     private function callDeepSeekAI($auditData, $options)
     {
+        $performanceMode = $options['performance_mode'] ?? false;
+        $cloudEnvironment = $options['cloud_environment'] ?? false;
+        $customTimeout = $options['timeout'] ?? ($cloudEnvironment ? 45 : 60);
+        
         // Try multiple ways to get the API key
         $apiKey = config('services.deepseek.api_key') 
                   ?? env('DEEPSEEK_API_KEY') 
@@ -732,6 +785,8 @@ class ReportController extends Controller
             'size_bytes' => $promptSize,
             'size_kb' => round($promptSize / 1024, 2),
             'report_type' => $options['report_type'],
+            'performance_mode' => $performanceMode,
+            'cloud_environment' => $cloudEnvironment,
             'total_questions' => $auditData['total_questions'],
             'total_responses' => $auditData['total_responses']
         ]);
@@ -739,16 +794,17 @@ class ReportController extends Controller
         try {
             $verifySSL = config('services.deepseek.verify_ssl', false);
 
-            // Use extended timeout for comprehensive data analysis
+            // Cloud-optimized timeout settings
             $response = Http::withHeaders([
                 'Authorization' => 'Bearer ' . $apiKey,
                 'Content-Type' => 'application/json'
             ])
             ->withOptions([
                 'verify' => $verifySSL,
-                'timeout' => 180  // Increased to 3 minutes for comprehensive analysis
+                'timeout' => $customTimeout,
+                'connect_timeout' => 10, // Quick connection for cloud
             ])
-            ->timeout(180)  // Increased to 3 minutes
+            ->timeout($customTimeout)
             ->post('https://api.deepseek.com/v1/chat/completions', [
                 'model' => 'deepseek-chat',
                 'messages' => [
@@ -761,30 +817,40 @@ class ReportController extends Controller
                         'content' => $prompt
                     ]
                 ],
-                'max_tokens' => 4000,  // Increased for more detailed reports with complete structure
-                'temperature' => 0.2
+                'max_tokens' => $cloudEnvironment ? 1500 : ($performanceMode ? 2000 : 3000), // Cloud-optimized tokens
+                'temperature' => 0.1 // Lower temperature for more focused responses
             ]);
         } catch (\Exception $e) {
             $errorMessage = $e->getMessage();
             
-            // Handle specific error types
+            // Enhanced cloud environment error handling
             if (strpos($errorMessage, 'SSL certificate') !== false) {
-                throw new \Exception('SSL certificate error. This is common in development environments. The request has been configured to bypass SSL verification.');
+                \Log::error('SSL Error in cloud', ['error' => $errorMessage]);
+                throw new \Exception('SSL certificate error in cloud environment. Please check network connectivity.');
             }
             
-            // Handle timeout errors specifically
-            if (strpos($errorMessage, 'timeout') !== false || strpos($errorMessage, 'Operation timed out') !== false) {
-                \Log::warning('AI API Timeout', [
+            // Handle timeout errors specifically for cloud
+            if (strpos($errorMessage, 'timeout') !== false || strpos($errorMessage, 'Operation timed out') !== false || strpos($errorMessage, 'cURL error 28') !== false) {
+                \Log::warning('AI API Timeout in Cloud', [
                     'prompt_size_kb' => round(strlen($prompt) / 1024, 2),
-                    'timeout_duration' => '180 seconds',
+                    'timeout_duration' => $customTimeout . ' seconds',
+                    'cloud_environment' => $cloudEnvironment,
+                    'performance_mode' => $performanceMode,
                     'report_type' => $options['report_type'],
                     'error' => $errorMessage
                 ]);
                 
-                throw new \Exception('The comprehensive analysis is taking longer than expected due to the large amount of data being processed. This indicates the system is analyzing all ' . $auditData['total_questions'] . ' questions across all templates and sections. Please try again, or consider generating a shorter Executive Summary report first.');
+                throw new \Exception('Cloud processing timeout (' . $customTimeout . 's). Data too large for cloud limits. Please try generating an Executive Summary instead of detailed analysis, or select fewer locations.');
             }
             
-            throw new \Exception('Network error: ' . $errorMessage);
+            // Handle connection errors
+            if (strpos($errorMessage, 'cURL error') !== false || strpos($errorMessage, 'Connection') !== false) {
+                \Log::error('Cloud Connection Error', ['error' => $errorMessage]);
+                throw new \Exception('Network connectivity issue in cloud environment. Please try again in a moment.');
+            }
+            
+            \Log::error('Cloud AI Processing Error', ['error' => $errorMessage]);
+            throw new \Exception('Cloud processing error: ' . $errorMessage);
         }
 
         if (!$response->successful()) {
