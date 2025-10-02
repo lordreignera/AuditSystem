@@ -110,26 +110,30 @@ class ReportController extends Controller
                 'selected_locations' => $request->selected_locations ?? 'all'
             ]);
             
-            // Ultra-aggressive cloud optimization based on report type
+            // Get report type first
             $reportType = $request->get('report_type');
+            
+            // Smart cloud optimization: Only use ultra-fast for Executive Summary
+            $useUltraFast = ($reportType === 'executive_summary'); // Only executives get ultra-fast
+            
             $cloudTimeout = match($reportType) {
-                'executive_summary' => 20,      // Very fast for summaries
-                'compliance_check' => 25,       // Quick compliance check
-                'comparative_analysis' => 30,   // Medium for comparisons
-                'detailed_analysis' => 35,      // Longer but still cloud-safe
-                default => 20
+                'executive_summary' => 25,      // Fast for summaries
+                'compliance_check' => 40,       // Medium for compliance
+                'comparative_analysis' => 50,   // More time for comparisons
+                'detailed_analysis' => 60,      // Full time for detailed reports
+                default => 25
             };
             
-            // Cloud-optimized AI request options
+            // Cloud-optimized AI request options with selective ultra-fast
             $options = [
                 'report_type' => $reportType,
                 'include_table_analysis' => $includeTables,
                 'include_recommendations' => $includeRecommendations,
                 'performance_mode' => $forcePerformanceMode,
                 'cloud_environment' => true,
-                'max_questions_detail' => $reportType === 'executive_summary' ? 10 : 20, // Very limited for cloud
+                'max_questions_detail' => $reportType === 'detailed_analysis' ? 100 : 50, // More details for detailed analysis
                 'timeout' => $cloudTimeout,
-                'ultra_fast_mode' => true, // New ultra-fast mode
+                'ultra_fast_mode' => $useUltraFast, // Only true for executive summary
             ];
             
             \Log::info('Starting AI analysis', ['audit_id' => $audit->id, 'options' => $options]);
@@ -389,12 +393,13 @@ class ReportController extends Controller
         
         $attachments = $attachmentsQuery->get();
 
-        // Ultra-aggressive limiting for cloud hosting
+        // Smart limiting for cloud hosting based on context
         if ($performanceMode) {
-            $maxAttachments = 2; // Even more aggressive for cloud
+            // Allow more attachments for detailed analysis
+            $maxAttachments = 3; // More reasonable for cloud
             
             if ($attachments->count() > $maxAttachments) {
-                \Log::info('Ultra-limiting attachments for cloud performance', [
+                \Log::info('Limiting attachments for cloud performance', [
                     'original_count' => $attachments->count(),
                     'limited_to' => $maxAttachments
                 ]);
@@ -903,27 +908,23 @@ class ReportController extends Controller
         $reportType = $options['report_type'] ?? 'executive_summary';
         
         if ($ultraFastMode) {
-            return match($reportType) {
-                'executive_summary' => 800,      // Very concise
-                'compliance_check' => 1000,      // Brief compliance
-                'comparative_analysis' => 1200,  // Quick comparison
-                'detailed_analysis' => 1400,     // Limited detail
-                default => 800
-            };
+            // Only executive summary uses ultra-fast now
+            return 1000; // Concise but sufficient
         }
         
         if ($cloudEnvironment) {
+            // More generous tokens for detailed cloud reports
             return match($reportType) {
-                'executive_summary' => 1200,
-                'compliance_check' => 1400,
-                'comparative_analysis' => 1600,
-                'detailed_analysis' => 1800,
-                default => 1200
+                'executive_summary' => 1500,
+                'compliance_check' => 2200,
+                'comparative_analysis' => 2500,
+                'detailed_analysis' => 3200,     // Generous for detailed analysis
+                default => 1500
             };
         }
         
         // Local/non-cloud defaults
-        return 3000;
+        return 4000;
     }
 
     /**
