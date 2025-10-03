@@ -57,6 +57,16 @@ class ReportController extends Controller
      */
     public function generateAiReport(Request $request, Audit $audit)
     {
+        // DISABLE FORCE MODE - User wants detailed reports
+        $FORCE_CLOUD_MODE = false; // Disabled to get detailed reports
+        
+        if ($FORCE_CLOUD_MODE) {
+            \Log::emergency('FORCING CLOUD MODE FOR TESTING', [
+                'audit_id' => $audit->id,
+                'forced_mode' => true
+            ]);
+        }
+        
         // Cloud-optimized settings for Laravel Cloud hosting
         @ini_set('max_execution_time', 180); // 3 minutes for cloud
         @ini_set('memory_limit', '256M'); // Conservative for cloud
@@ -113,30 +123,79 @@ class ReportController extends Controller
             // Get report type first
             $reportType = $request->get('report_type');
             
-            // Smart cloud optimization: Only use ultra-fast for Executive Summary
-            $useUltraFast = ($reportType === 'executive_summary'); // Only executives get ultra-fast
+            // Smart cloud optimization: Detect environment first
+            // TEMPORARILY DISABLE cloud detection to force local settings for detailed reports
+            $isCloudEnvironment = false; // Temporarily forced to false
+            \Log::info('TEMPORARILY FORCING LOCAL ENVIRONMENT FOR DETAILED REPORTS', [
+                'audit_id' => $audit->id,
+                'actual_detection_would_be' => $this->isCloudEnvironment()
+            ]);
             
-            $cloudTimeout = match($reportType) {
-                'executive_summary' => 25,      // Fast for summaries
-                'compliance_check' => 40,       // Medium for compliance
-                'comparative_analysis' => 50,   // More time for comparisons
-                'detailed_analysis' => 60,      // Full time for detailed reports
-                default => 25
-            };
+            if ($isCloudEnvironment) {
+                // Cloud: Smart optimization based on report type
+                if ($reportType === 'executive_summary') {
+                    $useUltraFast = true;  // Ultra-fast for summaries only
+                    $cloudTimeout = 30;    // Quick timeout for summaries
+                } else {
+                    $useUltraFast = false; // Allow detailed mode for other reports
+                    $cloudTimeout = match($reportType) {
+                        'detailed_analysis' => 90,      // Longer timeout for detailed reports
+                        'compliance_check' => 60,       // Medium timeout for compliance
+                        'comparative_analysis' => 75,   // Medium-long for comparisons
+                        default => 45
+                    };
+                }
+                \Log::info('Cloud environment detected - smart optimization by report type', [
+                    'audit_id' => $audit->id,
+                    'report_type' => $reportType,
+                    'timeout' => $cloudTimeout,
+                    'ultra_fast' => $useUltraFast
+                ]);
+            } else {
+                // Local: Only use ultra-fast for executive summaries
+                $useUltraFast = ($reportType === 'executive_summary');
+                $cloudTimeout = match($reportType) {
+                    'executive_summary' => 25,      // Fast for summaries
+                    'compliance_check' => 40,       // Medium for compliance
+                    'comparative_analysis' => 50,   // More time for comparisons
+                    'detailed_analysis' => 120,     // Much longer for complex detailed reports
+                    default => 25
+                };
+                \Log::info('Local environment detected - using standard timeouts', [
+                    'audit_id' => $audit->id,
+                    'report_type' => $reportType,
+                    'timeout' => $cloudTimeout,
+                    'ultra_fast' => $useUltraFast
+                ]);
+            }
             
-            // Cloud-optimized AI request options with selective ultra-fast
+            // Cloud-optimized AI request options with automatic environment detection
             $options = [
                 'report_type' => $reportType,
                 'include_table_analysis' => $includeTables,
                 'include_recommendations' => $includeRecommendations,
                 'performance_mode' => $forcePerformanceMode,
-                'cloud_environment' => true,
-                'max_questions_detail' => $reportType === 'detailed_analysis' ? 100 : 50, // More details for detailed analysis
+                'cloud_environment' => $isCloudEnvironment,
+                'max_questions_detail' => $isCloudEnvironment ? 20 : ($reportType === 'detailed_analysis' ? 100 : 50), // Drastically reduce for cloud
                 'timeout' => $cloudTimeout,
-                'ultra_fast_mode' => $useUltraFast, // Only true for executive summary
+                'ultra_fast_mode' => $useUltraFast,
             ];
             
-            \Log::info('Starting AI analysis', ['audit_id' => $audit->id, 'options' => $options]);
+            // FORCE OVERRIDE for testing
+            if ($FORCE_CLOUD_MODE) {
+                $options['cloud_environment'] = true;
+                $options['ultra_fast_mode'] = true;
+                $options['timeout'] = 15; // Super aggressive for testing
+                \Log::emergency('FORCING CLOUD OPTIONS', $options);
+            }
+            
+            \Log::info('Starting AI analysis with environment detection', [
+                'audit_id' => $audit->id, 
+                'environment' => $isCloudEnvironment ? 'cloud' : 'local',
+                'timeout' => $cloudTimeout,
+                'ultra_fast_mode' => $useUltraFast,
+                'options' => $options
+            ]);
             $aiStartTime = microtime(true);
             
             // Generate AI report
@@ -178,6 +237,38 @@ class ReportController extends Controller
             ], 500);
         }
     } 
+
+    /**
+     * Debug endpoint to test cloud environment detection
+     */
+    public function debugCloudDetection()
+    {
+        $isCloud = $this->isCloudEnvironment();
+        
+        return response()->json([
+            'is_cloud_environment' => $isCloud,
+            'environment' => app()->environment(),
+            'server_software' => $_SERVER['SERVER_SOFTWARE'] ?? 'Not Set',
+            'memory_limit' => ini_get('memory_limit'),
+            'max_execution_time' => ini_get('max_execution_time'),
+            'env_variables_checked' => [
+                'LARAVEL_CLOUD' => getenv('LARAVEL_CLOUD') ?: 'Not Set',
+                'DYNO' => getenv('DYNO') ?: 'Not Set',
+                'RAILWAY_ENVIRONMENT' => getenv('RAILWAY_ENVIRONMENT') ?: 'Not Set',
+                'VERCEL' => getenv('VERCEL') ?: 'Not Set',
+                'APP_ENV' => getenv('APP_ENV') ?: 'Not Set',
+            ],
+            'recommended_settings' => $isCloud ? [
+                'timeout' => 20,
+                'ultra_fast_mode' => true,
+                'max_tokens' => 600
+            ] : [
+                'timeout' => 60,
+                'ultra_fast_mode' => false,
+                'max_tokens' => 4000
+            ]
+        ]);
+    }
 
     /**
      * Debug endpoint to check what data is being collected
@@ -778,13 +869,28 @@ class ReportController extends Controller
     }
 
     /**
-     * Call DeepSeek AI API for report generation
+     * Call DeepSeek AI API for report generation with cloud optimization
      */
     private function callDeepSeekAI($auditData, $options)
     {
         $performanceMode = $options['performance_mode'] ?? false;
-        $cloudEnvironment = $options['cloud_environment'] ?? false;
-        $customTimeout = $options['timeout'] ?? ($cloudEnvironment ? 45 : 60);
+        $cloudEnvironment = $options['cloud_environment'] ?? $this->isCloudEnvironment();
+        
+        // Use the configured timeout from the options instead of overriding
+        if ($cloudEnvironment) {
+            // Use the timeout that was carefully configured based on report type
+            $customTimeout = $options['timeout'] ?? 45; // Default fallback for cloud
+            \Log::info('Cloud environment confirmed - using configured timeout', [
+                'timeout' => $customTimeout,
+                'report_type' => $options['report_type'] ?? 'unknown',
+                'ultra_fast_mode' => $options['ultra_fast_mode'] ?? false
+            ]);
+        } else {
+            $customTimeout = $options['timeout'] ?? 60;
+            \Log::info('Local environment - using standard timeout', [
+                'timeout' => $customTimeout
+            ]);
+        }
         
         // Try multiple ways to get the API key
         $apiKey = config('services.deepseek.api_key') 
@@ -794,6 +900,16 @@ class ReportController extends Controller
         
         if (!$apiKey || empty($apiKey)) {
             throw new \Exception('DeepSeek API key is not configured. Please add DEEPSEEK_API_KEY to your .env file.');
+        }
+
+        // Force ultra-fast mode for cloud environments to ensure completion
+        if ($cloudEnvironment) {
+            $options['ultra_fast_mode'] = true;
+            $options['cloud_environment'] = true;
+            \Log::info('Forcing ultra-fast mode for cloud environment', [
+                'original_ultra_fast' => $options['ultra_fast_mode'] ?? 'not set',
+                'forced_ultra_fast' => true
+            ]);
         }
 
         // Use smart prompt for faster, more intelligent analysis
@@ -814,17 +930,36 @@ class ReportController extends Controller
         try {
             $verifySSL = config('services.deepseek.verify_ssl', false);
 
-            // Cloud-optimized timeout settings
+            // Use the properly configured timeout from options instead of hardcoded override
+            $finalTimeout = $options['timeout'] ?? $customTimeout;
+            
+            \Log::info('Using configured timeout settings', [
+                'cloud_environment' => $cloudEnvironment,
+                'configured_timeout_from_options' => $options['timeout'] ?? 'not_set',
+                'custom_timeout_fallback' => $customTimeout,
+                'final_timeout' => $finalTimeout,
+                'ultra_fast_forced' => $options['ultra_fast_mode'] ?? false,
+                'report_type' => $options['report_type'] ?? 'unknown'
+            ]);
+            
+            \Log::info('Making DeepSeek API request', [
+                'api_endpoint' => 'https://api.deepseek.com/chat/completions',
+                'verify_ssl' => $verifySSL,
+                'timeout' => $finalTimeout,
+                'prompt_size_kb' => round(strlen($prompt) / 1024, 2),
+                'cloud_environment' => $cloudEnvironment
+            ]);
+            
             $response = Http::withHeaders([
                 'Authorization' => 'Bearer ' . $apiKey,
                 'Content-Type' => 'application/json'
             ])
             ->withOptions([
                 'verify' => $verifySSL,
-                'timeout' => $customTimeout,
-                'connect_timeout' => 10, // Quick connection for cloud
+                'timeout' => $finalTimeout,
+                'connect_timeout' => 5, // Very quick connection for cloud
             ])
-            ->timeout($customTimeout)
+            ->timeout($finalTimeout)
             ->post('https://api.deepseek.com/v1/chat/completions', [
                 'model' => 'deepseek-chat',
                 'messages' => [
@@ -855,20 +990,24 @@ class ReportController extends Controller
             if (strpos($errorMessage, 'timeout') !== false || strpos($errorMessage, 'Operation timed out') !== false || strpos($errorMessage, 'cURL error 28') !== false) {
                 \Log::warning('AI API Timeout in Cloud', [
                     'prompt_size_kb' => round(strlen($prompt) / 1024, 2),
-                    'timeout_duration' => $customTimeout . ' seconds',
+                    'timeout_duration' => $finalTimeout . ' seconds',
                     'cloud_environment' => $cloudEnvironment,
                     'performance_mode' => $performanceMode,
                     'report_type' => $options['report_type'],
                     'error' => $errorMessage
                 ]);
                 
-                throw new \Exception('Cloud processing timeout (' . $customTimeout . 's). Data too large for cloud limits. Please try generating an Executive Summary instead of detailed analysis, or select fewer locations.');
+                throw new \Exception('Cloud processing timeout (' . $finalTimeout . 's). The audit data is too complex for cloud hosting limits. Try these solutions: 1) Generate an Executive Summary instead (much faster), 2) Select fewer locations to analyze, 3) Use fewer review types. Cloud hosting has strict time limits for processing.');
             }
             
             // Handle connection errors
             if (strpos($errorMessage, 'cURL error') !== false || strpos($errorMessage, 'Connection') !== false) {
-                \Log::error('Cloud Connection Error', ['error' => $errorMessage]);
-                throw new \Exception('Network connectivity issue in cloud environment. Please try again in a moment.');
+                \Log::error('API Connection Error', [
+                    'error' => $errorMessage,
+                    'cloud_environment' => $cloudEnvironment,
+                    'timeout_used' => $finalTimeout
+                ]);
+                throw new \Exception('Network connectivity issue with DeepSeek API. Error: ' . $errorMessage . '. Please try again in a moment.');
             }
             
             \Log::error('Cloud AI Processing Error', ['error' => $errorMessage]);
@@ -908,18 +1047,21 @@ class ReportController extends Controller
         $reportType = $options['report_type'] ?? 'executive_summary';
         
         if ($ultraFastMode) {
-            // Only executive summary uses ultra-fast now
-            return 1000; // Concise but sufficient
+            // Ultra-fast mode: Very aggressive limits for cloud speed
+            if ($cloudEnvironment) {
+                return 600; // Super minimal for cloud ultra-fast
+            }
+            return 1000; // Standard ultra-fast
         }
         
         if ($cloudEnvironment) {
-            // More generous tokens for detailed cloud reports
+            // More aggressive tokens for cloud reports to ensure completion
             return match($reportType) {
-                'executive_summary' => 1500,
-                'compliance_check' => 2200,
-                'comparative_analysis' => 2500,
-                'detailed_analysis' => 3200,     // Generous for detailed analysis
-                default => 1500
+                'executive_summary' => 800,      // Reduced from 1500
+                'compliance_check' => 1200,      // Reduced from 2200
+                'comparative_analysis' => 1500,  // Reduced from 2500
+                'detailed_analysis' => 2000,     // Reduced from 3200
+                default => 800
             };
         }
         
@@ -1136,11 +1278,12 @@ class ReportController extends Controller
     }
 
     /**
-     * Build ultra-fast prompt for cloud hosting
+     * Build ultra-fast prompt for cloud hosting with maximum efficiency
      */
     private function buildUltraFastPrompt($auditData, $options)
     {
         $reportType = $options['report_type'];
+        $cloudEnvironment = $options['cloud_environment'] ?? false;
         
         // Minimal prompt for maximum cloud speed
         $prompt = "Healthcare Audit Analysis - Be concise and actionable.\n\n";
@@ -1149,17 +1292,27 @@ class ReportController extends Controller
         $prompt .= "AUDIT: {$auditData['audit_info']['name']} ({$auditData['audit_info']['country']})\n";
         $prompt .= "COMPLETION: " . round(($auditData['total_responses'] / max($auditData['total_questions'], 1)) * 100, 1) . "% ({$auditData['total_responses']}/{$auditData['total_questions']})\n\n";
         
-        // Summary data only - no detailed questions
-        $prompt .= "LOCATIONS:\n";
-        foreach ($auditData['review_types_data'] as $reviewType) {
-            $prompt .= "• {$reviewType['review_type_name']}\n";
-            foreach ($reviewType['locations'] as $location) {
-                $prompt .= "  - {$location['location_name']}: {$location['response_summary']['completion_percentage']}% complete\n";
+        // For cloud environments, use ultra-minimal data
+        if ($cloudEnvironment) {
+            $prompt .= "REVIEW TYPES: " . count($auditData['review_types_data']) . "\n";
+            $totalLocations = 0;
+            foreach ($auditData['review_types_data'] as $reviewType) {
+                $totalLocations += count($reviewType['locations']);
+            }
+            $prompt .= "LOCATIONS: {$totalLocations}\n\n";
+        } else {
+            // Summary data only - no detailed questions
+            $prompt .= "LOCATIONS:\n";
+            foreach ($auditData['review_types_data'] as $reviewType) {
+                $prompt .= "• {$reviewType['review_type_name']}\n";
+                foreach ($reviewType['locations'] as $location) {
+                    $prompt .= "  - {$location['location_name']}: {$location['response_summary']['completion_percentage']}% complete\n";
+                }
             }
         }
         
         // Minimal requirements based on report type
-        $prompt .= "\nGENERATE: ";
+        $prompt .= "GENERATE: ";
         switch ($reportType) {
             case 'executive_summary':
                 $prompt .= "Executive summary with key findings and 3 main recommendations.";
@@ -1670,5 +1823,63 @@ class ReportController extends Controller
             ]);
             abort(500, 'Failed to generate PDF: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Detect if running in cloud environment
+     */
+    private function isCloudEnvironment()
+    {
+        // Check for common cloud environment indicators
+        $cloudIndicators = [
+            // Laravel Cloud specific
+            'LARAVEL_CLOUD',
+            // Heroku
+            'DYNO',
+            // Railway
+            'RAILWAY_ENVIRONMENT',
+            // Vercel
+            'VERCEL',
+            // AWS Lambda
+            'AWS_LAMBDA_FUNCTION_NAME',
+            // Google Cloud
+            'GOOGLE_CLOUD_PROJECT',
+            // Azure
+            'WEBSITE_SITE_NAME',
+            // Generic cloud indicators
+            'CLOUD_PLATFORM',
+            'HOSTING_ENVIRONMENT'
+        ];
+        
+        foreach ($cloudIndicators as $indicator) {
+            if (getenv($indicator) || isset($_ENV[$indicator])) {
+                return true;
+            }
+        }
+        
+        // Check if app is in production and has cloud-like characteristics
+        if (app()->environment('production')) {
+            // Check for limited execution time (typical cloud constraint)
+            $maxExecutionTime = ini_get('max_execution_time');
+            if ($maxExecutionTime > 0 && $maxExecutionTime <= 60) {
+                return true;
+            }
+            
+            // Check if running under a web server with cloud characteristics
+            $serverSoftware = $_SERVER['SERVER_SOFTWARE'] ?? '';
+            if (strpos($serverSoftware, 'nginx') !== false || 
+                strpos($serverSoftware, 'Apache') !== false) {
+                // Check for constrained memory (typical cloud indicator)
+                $memoryLimit = ini_get('memory_limit');
+                if ($memoryLimit && preg_match('/(\d+)([MG])/i', $memoryLimit, $matches)) {
+                    $memoryMB = $matches[1] * ($matches[2] === 'G' ? 1024 : 1);
+                    if ($memoryMB <= 512) { // Cloud environments often have memory constraints
+                        return true;
+                    }
+                }
+            }
+        }
+        
+        return false;
     }
 }

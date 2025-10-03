@@ -299,6 +299,7 @@ Route::middleware([
         Route::get('reports', [\App\Http\Controllers\Admin\ReportController::class, 'index'])->name('admin.reports.index');
         Route::get('reports/{audit}', [\App\Http\Controllers\Admin\ReportController::class, 'show'])->name('admin.reports.show');
         Route::get('reports/{audit}/debug-data', [\App\Http\Controllers\Admin\ReportController::class, 'debugAuditData'])->name('admin.reports.debug-data');
+        Route::get('reports/debug-cloud', [\App\Http\Controllers\Admin\ReportController::class, 'debugCloudDetection'])->name('admin.reports.debug-cloud');
         Route::post('reports/{audit}/generate', [\App\Http\Controllers\Admin\ReportController::class, 'generateAiReport'])->name('admin.reports.generate');
     Route::post('reports/{audit}/export-pdf', [\App\Http\Controllers\Admin\ReportController::class, 'exportAsPDF'])->name('admin.reports.export-pdf');
         Route::post('reports/{audit}/export-word', [\App\Http\Controllers\Admin\ReportController::class, 'exportReportToWord'])->name('admin.reports.export-word');
