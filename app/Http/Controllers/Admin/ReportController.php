@@ -108,6 +108,22 @@ class ReportController extends Controller
             // Force performance mode for cloud hosting
             $auditData = $this->collectAuditData($audit, $request->selected_locations ?? [], $forcePerformanceMode);
             
+            // CRITICAL DEBUG: Log exactly what data is being collected from database
+            \Log::emergency('AUDIT DATA COLLECTION DEBUG', [
+                'audit_id' => $audit->id,
+                'total_questions' => $auditData['total_questions'] ?? 'NOT_SET',
+                'total_responses' => $auditData['total_responses'] ?? 'NOT_SET',
+                'review_types_count' => count($auditData['review_types_data'] ?? []),
+                'audit_info' => $auditData['audit_info'] ?? 'NOT_SET',
+                'first_review_type_name' => $auditData['review_types_data'][0]['review_type_name'] ?? 'NOT_SET',
+                'first_location_name' => $auditData['review_types_data'][0]['locations'][0]['location_name'] ?? 'NOT_SET',
+                'first_section_name' => $auditData['review_types_data'][0]['locations'][0]['sections_data'][0]['section_name'] ?? 'NOT_SET',
+                'first_question_text' => $auditData['review_types_data'][0]['locations'][0]['sections_data'][0]['questions_data'][0]['question_text'] ?? 'NOT_SET',
+                'first_response' => $auditData['review_types_data'][0]['locations'][0]['sections_data'][0]['questions_data'][0]['response'] ?? 'NOT_SET',
+                'data_structure_keys' => array_keys($auditData),
+                'sample_questions_count' => count($auditData['review_types_data'][0]['locations'][0]['sections_data'][0]['questions_data'] ?? [])
+            ]);
+            
             $dataCollectionTime = round(microtime(true) - $startTime, 2);
             
             // Log what data we collected for debugging
@@ -921,6 +937,23 @@ class ReportController extends Controller
 
         // Use smart prompt for faster, more intelligent analysis
         $prompt = $this->buildSmartPromptForAI($auditData, $options);
+        
+        // CRITICAL DEBUG: Log prompt details to verify data inclusion
+        \Log::emergency('AI PROMPT DEBUG', [
+            'audit_id' => $auditData['audit_info']['id'] ?? 'NOT_SET',
+            'prompt_length' => strlen($prompt),
+            'prompt_first_500_chars' => substr($prompt, 0, 500),
+            'prompt_contains_audit_name' => strpos($prompt, $auditData['audit_info']['name'] ?? '') !== false,
+            'prompt_contains_questions' => substr_count($prompt, 'Q1:') + substr_count($prompt, 'Q2:') + substr_count($prompt, 'Q3:'),
+            'prompt_contains_templates' => substr_count($prompt, 'TEMPLATE:'),
+            'prompt_contains_sections' => substr_count($prompt, 'SECTION:'),
+            'prompt_contains_responses' => substr_count($prompt, 'ANSWER:'),
+            'prompt_contains_khesana' => strpos(strtolower($prompt), 'khesana') !== false,
+            'prompt_contains_facility' => strpos(strtolower($prompt), 'facility') !== false,
+            'options_report_type' => $options['report_type'] ?? 'NOT_SET',
+            'options_cloud_env' => $options['cloud_environment'] ?? 'NOT_SET',
+            'options_ultra_fast' => $options['ultra_fast_mode'] ?? 'NOT_SET'
+        ]);
         
         // Log prompt size for monitoring
         $promptSize = strlen($prompt);
