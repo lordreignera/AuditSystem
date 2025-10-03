@@ -1100,12 +1100,12 @@ class ReportController extends Controller
         }
         
         if ($cloudEnvironment) {
-            // Increased tokens for cloud to allow comprehensive detailed reports
+            // Balanced tokens for cloud to prevent timeout while maintaining detail
             return match($reportType) {
                 'executive_summary' => 800,      // Keep executive summary short
-                'compliance_check' => 2000,      // Increased from 1200
-                'comparative_analysis' => 2500,  // Increased from 1500
-                'detailed_analysis' => 8000,     // MASSIVELY increased from 2000 to match local detail
+                'compliance_check' => 2000,      // Reasonable for compliance
+                'comparative_analysis' => 2500,  // Reasonable for comparisons
+                'detailed_analysis' => 6000,     // Reduced from 8000 to prevent timeout but still detailed
                 default => 800
             };
         }
@@ -1183,15 +1183,21 @@ class ReportController extends Controller
         if ($reportType === 'detailed_analysis') {
             $prompt .= "COMPLETE AUDIT DATA STRUCTURE FOR FULL ANALYSIS:\n";
             
-            // Cloud optimization: For detailed analysis, provide FULL data like local environment
+            // Cloud optimization: Smart data limits to prevent timeout while preserving transparency
             if ($reportType === 'detailed_analysis') {
-                // NO LIMITS for detailed analysis - full transparency required
-                $maxQuestionsPerSection = $cloudEnvironment ? 999 : 50;  // Unlimited for detailed reports
-                $maxSectionsPerLocation = $cloudEnvironment ? 999 : 100; // Unlimited for detailed reports
+                if ($cloudEnvironment) {
+                    // Cloud: Reasonable limits to prevent 7-second PHP-FPM timeout
+                    $maxQuestionsPerSection = 15; // Reduced from unlimited to prevent timeout
+                    $maxSectionsPerLocation = 20; // Reduced from unlimited to prevent timeout
+                } else {
+                    // Local: No limits for full transparency
+                    $maxQuestionsPerSection = 999;
+                    $maxSectionsPerLocation = 999;
+                }
             } else {
-                // Other report types can have reasonable limits
-                $maxQuestionsPerSection = $cloudEnvironment ? 40 : 50;
-                $maxSectionsPerLocation = $cloudEnvironment ? 50 : 100;
+                // Other report types can have standard limits
+                $maxQuestionsPerSection = $cloudEnvironment ? 10 : 50;
+                $maxSectionsPerLocation = $cloudEnvironment ? 15 : 100;
             }
             
             foreach ($auditData['review_types_data'] as $reviewType) {
@@ -1256,9 +1262,12 @@ class ReportController extends Controller
                                     if (is_array($responseText)) {
                                         $responseText = implode(', ', $responseText);
                                     }
-                                    // Allow full responses for detailed analysis, reasonable limits for others
-                                    $maxResponseLength = $cloudEnvironment ? 
-                                        ($reportType === 'detailed_analysis' ? 1000 : 400) : 500;
+                                    // Smart response limits: Full detail for local, optimized for cloud
+                                    if ($reportType === 'detailed_analysis') {
+                                        $maxResponseLength = $cloudEnvironment ? 250 : 1000; // Shorter for cloud to prevent timeout
+                                    } else {
+                                        $maxResponseLength = $cloudEnvironment ? 200 : 500;
+                                    }
                                     
                                     if (is_string($responseText) && strlen($responseText) > $maxResponseLength) {
                                         $responseText = substr($responseText, 0, $maxResponseLength) . "... [TRUNCATED for " . ($cloudEnvironment ? "cloud efficiency" : "analysis efficiency") . "]";
