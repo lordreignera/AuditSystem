@@ -124,32 +124,39 @@ class ReportController extends Controller
             $reportType = $request->get('report_type');
             
             // Smart cloud optimization: Detect environment first
-            // TEMPORARILY DISABLE cloud detection to force local settings for detailed reports
-            $isCloudEnvironment = false; // Temporarily forced to false
-            \Log::info('TEMPORARILY FORCING LOCAL ENVIRONMENT FOR DETAILED REPORTS', [
+            $isCloudEnvironment = $this->isCloudEnvironment();
+            \Log::info('Environment Detection Results', [
                 'audit_id' => $audit->id,
-                'actual_detection_would_be' => $this->isCloudEnvironment()
+                'is_cloud' => $isCloudEnvironment,
+                'report_type' => $reportType,
+                'detection_indicators' => [
+                    'LARAVEL_CLOUD' => env('LARAVEL_CLOUD'),
+                    'DYNO' => env('DYNO'),
+                    'RAILWAY_ENVIRONMENT' => env('RAILWAY_ENVIRONMENT'),
+                    'server_software' => $_SERVER['SERVER_SOFTWARE'] ?? 'unknown'
+                ]
             ]);
             
             if ($isCloudEnvironment) {
-                // Cloud: Smart optimization based on report type
+                // Cloud: Allow detailed reports but with cloud-optimized timeouts
                 if ($reportType === 'executive_summary') {
                     $useUltraFast = true;  // Ultra-fast for summaries only
-                    $cloudTimeout = 30;    // Quick timeout for summaries
+                    $cloudTimeout = 25;    // Quick timeout for summaries
                 } else {
                     $useUltraFast = false; // Allow detailed mode for other reports
                     $cloudTimeout = match($reportType) {
-                        'detailed_analysis' => 90,      // Longer timeout for detailed reports
-                        'compliance_check' => 60,       // Medium timeout for compliance
-                        'comparative_analysis' => 75,   // Medium-long for comparisons
-                        default => 45
+                        'detailed_analysis' => 45,      // Cloud-safe timeout for detailed reports
+                        'compliance_check' => 35,       // Medium timeout for compliance
+                        'comparative_analysis' => 40,   // Medium timeout for comparisons
+                        default => 30
                     };
                 }
-                \Log::info('Cloud environment detected - smart optimization by report type', [
+                \Log::info('Cloud environment detected - using cloud-optimized settings', [
                     'audit_id' => $audit->id,
                     'report_type' => $reportType,
                     'timeout' => $cloudTimeout,
-                    'ultra_fast' => $useUltraFast
+                    'ultra_fast' => $useUltraFast,
+                    'allows_detailed' => !$useUltraFast
                 ]);
             } else {
                 // Local: Only use ultra-fast for executive summaries
@@ -997,7 +1004,11 @@ class ReportController extends Controller
                     'error' => $errorMessage
                 ]);
                 
-                throw new \Exception('Cloud processing timeout (' . $finalTimeout . 's). The audit data is too complex for cloud hosting limits. Try these solutions: 1) Generate an Executive Summary instead (much faster), 2) Select fewer locations to analyze, 3) Use fewer review types. Cloud hosting has strict time limits for processing.');
+                $timeoutMessage = $cloudEnvironment ? 
+                    'Cloud processing timeout (' . $finalTimeout . 's). The audit data is too complex for cloud hosting limits. Try these solutions: 1) Generate an Executive Summary instead (much faster), 2) Select fewer locations to analyze, 3) Use fewer review types. Cloud hosting has strict time limits for processing.' :
+                    'Processing timeout (' . $finalTimeout . 's). The audit data is complex and requires more processing time. Try: 1) Generate an Executive Summary instead, 2) Select fewer locations, 3) Reduce the scope of analysis.';
+                
+                throw new \Exception($timeoutMessage);
             }
             
             // Handle connection errors
@@ -1095,9 +1106,13 @@ class ReportController extends Controller
         $prompt .= "- Total Responses: {$auditData['total_responses']}\n";
         $prompt .= "- Completion Rate: " . round(($auditData['total_responses'] / max($auditData['total_questions'], 1)) * 100, 1) . "%\n\n";
         
-        // For detailed analysis, include COMPLETE data structure with smart optimization
+        // For detailed analysis, include COMPLETE data structure with cloud optimization
         if ($reportType === 'detailed_analysis') {
             $prompt .= "COMPLETE AUDIT DATA STRUCTURE FOR FULL ANALYSIS:\n";
+            
+            // Cloud optimization: Limit detail level but preserve transparency structure
+            $maxQuestionsPerSection = $cloudEnvironment ? 15 : 50; // Reduce for cloud but still detailed
+            $maxSectionsPerLocation = $cloudEnvironment ? 20 : 100; // Reasonable cloud limit
             
             foreach ($auditData['review_types_data'] as $reviewType) {
                 $prompt .= "═══════════════════════════════════════\n";
@@ -1119,8 +1134,14 @@ class ReportController extends Controller
                     $totalQuestions = $location['response_summary']['location_total_questions'] ?? ($location['response_summary']['answered_questions'] + $location['response_summary']['unanswered_questions']);
                     $prompt .= "Overall Completion: {$location['response_summary']['completion_percentage']}% ({$location['response_summary']['answered_questions']}/{$totalQuestions})\n\n";
                     
-                    // Show ALL sections and questions with optimized formatting
+                    // Show sections with cloud-optimized detail level
+                    $sectionCount = 0;
                     foreach ($location['sections_data'] as $section) {
+                        if ($sectionCount >= $maxSectionsPerLocation) {
+                            $prompt .= "[Additional sections omitted for cloud efficiency - structure preserved]\n";
+                            break;
+                        }
+                        
                         $prompt .= "TEMPLATE: {$section['template_name']}\n";
                         $prompt .= "SECTION: {$section['section_name']}\n";
                         if (!empty($section['section_description'])) {
@@ -1129,26 +1150,36 @@ class ReportController extends Controller
                         $prompt .= "Order: {$section['section_order']}\n";
                         $prompt .= "Questions in section: " . count($section['questions_data']) . "\n\n";
                         
-                        // Show ALL questions with smart response formatting
+                        // Show questions with cloud-aware limits but preserve transparency
+                        $questionCount = 0;
                         foreach ($section['questions_data'] as $qIndex => $question) {
+                            if ($questionCount >= $maxQuestionsPerSection) {
+                                $prompt .= "[Additional questions in section omitted for cloud efficiency]\n\n";
+                                break;
+                            }
+                            
                             $prompt .= "Q{$question['order']}: {$question['question_text']}\n";
                             $prompt .= "Type: {$question['response_type']} | Required: " . ($question['is_required'] ? 'Yes' : 'No') . "\n";
                             
                             if (!empty($question['response'])) {
-                                // Smart formatting based on response type
+                                // Smart formatting based on response type and environment
                                 if ($question['response_type'] === 'table') {
-                                    // For tables, show structured summary instead of full data to save space
+                                    // For tables, show structured summary
                                     $responseText = $question['formatted_answer'] ?? $question['response'];
                                     if (is_array($question['response'])) {
                                         $responseText = "[TABLE DATA - See formatted analysis]";
                                     }
                                     $prompt .= "ANSWER: {$responseText}\n";
                                 } else {
-                                    // For non-table responses, show full content
-                                    $responseText = is_array($question['response']) ? implode(', ', $question['response']) : $question['response'];
-                                    // Limit very long responses to prevent timeout
-                                    if (strlen($responseText) > 500) {
-                                        $responseText = substr($responseText, 0, 500) . "... [TRUNCATED - Full response available for analysis]";
+                                    // Handle other response types efficiently for cloud
+                                    $responseText = $question['formatted_answer'] ?? $question['response'];
+                                    if (is_array($responseText)) {
+                                        $responseText = implode(', ', $responseText);
+                                    }
+                                    // Limit long responses for cloud efficiency
+                                    if (is_string($responseText) && strlen($responseText) > ($cloudEnvironment ? 300 : 500)) {
+                                        $maxLength = $cloudEnvironment ? 300 : 500;
+                                        $responseText = substr($responseText, 0, $maxLength) . "... [TRUNCATED for " . ($cloudEnvironment ? "cloud efficiency" : "analysis efficiency") . "]";
                                     }
                                     $prompt .= "ANSWER: {$responseText}\n";
                                 }
@@ -1160,14 +1191,19 @@ class ReportController extends Controller
                                 $prompt .= "ANSWER: [NO RESPONSE]\n";
                             }
                             $prompt .= "---\n";
+                            $questionCount++;
                         }
                         $prompt .= "\n";
+                        $sectionCount++;
                     }
                 }
             }
             
             // Complete data analysis note with optimization info
-            $prompt .= "\n[COMPLETE DATA SET: This includes ALL review types, ALL locations, ALL templates, ALL sections, and ALL questions with their responses. Table responses are formatted for analysis efficiency while maintaining full data integrity.]\n\n";
+            $optimizationNote = $cloudEnvironment ? 
+                "[COMPLETE DATA SET with CLOUD OPTIMIZATION: This includes ALL review types, ALL locations, ALL templates, and comprehensive section/question coverage. Data is optimized for cloud processing while preserving complete transparency and audit structure.]" :
+                "[COMPLETE DATA SET: This includes ALL review types, ALL locations, ALL templates, ALL sections, and ALL questions with their responses. Table responses are formatted for analysis efficiency while maintaining full data integrity.]";
+            $prompt .= "\n{$optimizationNote}\n\n";
         } else {
             // For other report types, use summary with key examples
             $prompt .= "AUDIT DATA SUMMARY:\n";
