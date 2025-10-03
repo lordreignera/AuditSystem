@@ -145,10 +145,10 @@ class ReportController extends Controller
                 } else {
                     $useUltraFast = false; // Allow detailed mode for other reports
                     $cloudTimeout = match($reportType) {
-                        'detailed_analysis' => 45,      // Cloud-safe timeout for detailed reports
-                        'compliance_check' => 35,       // Medium timeout for compliance
-                        'comparative_analysis' => 40,   // Medium timeout for comparisons
-                        default => 30
+                        'detailed_analysis' => 90,      // Increased to 90s for cloud as requested
+                        'compliance_check' => 60,       // Increased timeout for compliance
+                        'comparative_analysis' => 75,   // Increased timeout for comparisons
+                        default => 45
                     };
                 }
                 \Log::info('Cloud environment detected - using cloud-optimized settings', [
@@ -1111,8 +1111,8 @@ class ReportController extends Controller
             $prompt .= "COMPLETE AUDIT DATA STRUCTURE FOR FULL ANALYSIS:\n";
             
             // Cloud optimization: Limit detail level but preserve transparency structure
-            $maxQuestionsPerSection = $cloudEnvironment ? 15 : 50; // Reduce for cloud but still detailed
-            $maxSectionsPerLocation = $cloudEnvironment ? 20 : 100; // Reasonable cloud limit
+            $maxQuestionsPerSection = $cloudEnvironment ? 8 : 50;  // Reduced from 15 to 8 for cloud efficiency
+            $maxSectionsPerLocation = $cloudEnvironment ? 12 : 100; // Reduced from 20 to 12 for cloud efficiency
             
             foreach ($auditData['review_types_data'] as $reviewType) {
                 $prompt .= "═══════════════════════════════════════\n";
@@ -1177,8 +1177,8 @@ class ReportController extends Controller
                                         $responseText = implode(', ', $responseText);
                                     }
                                     // Limit long responses for cloud efficiency
-                                    if (is_string($responseText) && strlen($responseText) > ($cloudEnvironment ? 300 : 500)) {
-                                        $maxLength = $cloudEnvironment ? 300 : 500;
+                                    if (is_string($responseText) && strlen($responseText) > ($cloudEnvironment ? 150 : 500)) {
+                                        $maxLength = $cloudEnvironment ? 150 : 500; // Much shorter for cloud
                                         $responseText = substr($responseText, 0, $maxLength) . "... [TRUNCATED for " . ($cloudEnvironment ? "cloud efficiency" : "analysis efficiency") . "]";
                                     }
                                     $prompt .= "ANSWER: {$responseText}\n";
@@ -1887,9 +1887,42 @@ class ReportController extends Controller
             'HOSTING_ENVIRONMENT'
         ];
         
+        $detectedIndicators = [];
         foreach ($cloudIndicators as $indicator) {
-            if (getenv($indicator) || isset($_ENV[$indicator])) {
-                return true;
+            $value = getenv($indicator) ?: $_ENV[$indicator] ?? null;
+            if ($value) {
+                $detectedIndicators[$indicator] = $value;
+            }
+        }
+        
+        // Additional cloud detection based on common cloud patterns
+        $additionalChecks = [
+            'document_root_cloud' => strpos($_SERVER['DOCUMENT_ROOT'] ?? '', '/var/www/html') !== false,
+            'server_software_cloud' => strpos($_SERVER['SERVER_SOFTWARE'] ?? '', 'nginx') !== false,
+            'cloud_paths' => file_exists('/opt/cloud/') || file_exists('/var/www/html/'),
+            'app_env' => (env('APP_ENV') === 'production' && php_sapi_name() !== 'cli'),
+        ];
+        
+        $isCloud = !empty($detectedIndicators) || array_filter($additionalChecks);
+        
+        // FORCE CLOUD DETECTION - Based on logs showing /var/www/html paths
+        if (!$isCloud && strpos($_SERVER['DOCUMENT_ROOT'] ?? '', '/var/www/html') !== false) {
+            $isCloud = true;
+            \Log::info('FORCED CLOUD DETECTION based on /var/www/html path');
+        }
+        
+        // Enhanced logging for debugging
+        \Log::info('Cloud Environment Detection Results', [
+            'detected_indicators' => $detectedIndicators,
+            'additional_checks' => $additionalChecks,
+            'is_cloud_final' => $isCloud,
+            'document_root' => $_SERVER['DOCUMENT_ROOT'] ?? 'not_set',
+            'server_software' => $_SERVER['SERVER_SOFTWARE'] ?? 'not_set',
+            'app_env' => env('APP_ENV'),
+            'sapi_name' => php_sapi_name()
+        ]);
+        
+        return $isCloud;
             }
         }
         
@@ -1905,17 +1938,5 @@ class ReportController extends Controller
             $serverSoftware = $_SERVER['SERVER_SOFTWARE'] ?? '';
             if (strpos($serverSoftware, 'nginx') !== false || 
                 strpos($serverSoftware, 'Apache') !== false) {
-                // Check for constrained memory (typical cloud indicator)
-                $memoryLimit = ini_get('memory_limit');
-                if ($memoryLimit && preg_match('/(\d+)([MG])/i', $memoryLimit, $matches)) {
-                    $memoryMB = $matches[1] * ($matches[2] === 'G' ? 1024 : 1);
-                    if ($memoryMB <= 512) { // Cloud environments often have memory constraints
-                        return true;
-                    }
-                }
-            }
-        }
-        
-        return false;
     }
 }
