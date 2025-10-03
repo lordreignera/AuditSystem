@@ -145,10 +145,10 @@ class ReportController extends Controller
                 } else {
                     $useUltraFast = false; // Allow detailed mode for other reports
                     $cloudTimeout = match($reportType) {
-                        'detailed_analysis' => 90,      // Increased to 90s for cloud as requested
-                        'compliance_check' => 60,       // Increased timeout for compliance
-                        'comparative_analysis' => 75,   // Increased timeout for comparisons
-                        default => 45
+                        'detailed_analysis' => 120,     // Increased to 120s as requested for full detail
+                        'compliance_check' => 75,       // Increased timeout for compliance
+                        'comparative_analysis' => 90,   // Increased timeout for comparisons
+                        default => 60
                     };
                 }
                 \Log::info('Cloud environment detected - using cloud-optimized settings', [
@@ -1098,6 +1098,10 @@ class ReportController extends Controller
         
         $prompt = "You are an expert healthcare auditor and data analyst. Analyze this audit data and provide intelligent insights with complete transparency, showing all data sources.\n\n";
         
+        if ($cloudEnvironment && $reportType === 'detailed_analysis') {
+            $prompt .= "**CLOUD ENVIRONMENT - MAINTAIN FULL TRANSPARENCY**: Despite cloud optimization, you MUST provide the complete detailed analysis format with full data structure breakdown, template analysis, and comprehensive findings. Do not provide summary-style reports.\n\n";
+        }
+        
         // Basic audit context
         $prompt .= "AUDIT CONTEXT:\n";
         $prompt .= "- Audit: {$auditData['audit_info']['name']}\n";
@@ -1110,9 +1114,9 @@ class ReportController extends Controller
         if ($reportType === 'detailed_analysis') {
             $prompt .= "COMPLETE AUDIT DATA STRUCTURE FOR FULL ANALYSIS:\n";
             
-            // Cloud optimization: Limit detail level but preserve transparency structure
-            $maxQuestionsPerSection = $cloudEnvironment ? 8 : 50;  // Reduced from 15 to 8 for cloud efficiency
-            $maxSectionsPerLocation = $cloudEnvironment ? 12 : 100; // Reduced from 20 to 12 for cloud efficiency
+            // Cloud optimization: Allow more detail for comprehensive transparency
+            $maxQuestionsPerSection = $cloudEnvironment ? 20 : 50;  // Increased from 8 to 20 for more detail
+            $maxSectionsPerLocation = $cloudEnvironment ? 25 : 100; // Increased from 12 to 25 for more coverage
             
             foreach ($auditData['review_types_data'] as $reviewType) {
                 $prompt .= "═══════════════════════════════════════\n";
@@ -1176,9 +1180,9 @@ class ReportController extends Controller
                                     if (is_array($responseText)) {
                                         $responseText = implode(', ', $responseText);
                                     }
-                                    // Limit long responses for cloud efficiency
-                                    if (is_string($responseText) && strlen($responseText) > ($cloudEnvironment ? 150 : 500)) {
-                                        $maxLength = $cloudEnvironment ? 150 : 500; // Much shorter for cloud
+                                    // Allow longer responses for cloud comprehensive reporting
+                                    if (is_string($responseText) && strlen($responseText) > ($cloudEnvironment ? 400 : 500)) {
+                                        $maxLength = $cloudEnvironment ? 400 : 500; // Increased from 150 to 400 for cloud
                                         $responseText = substr($responseText, 0, $maxLength) . "... [TRUNCATED for " . ($cloudEnvironment ? "cloud efficiency" : "analysis efficiency") . "]";
                                     }
                                     $prompt .= "ANSWER: {$responseText}\n";
@@ -1266,6 +1270,9 @@ class ReportController extends Controller
                 
             case 'detailed_analysis':
                 $prompt .= "DETAILED ANALYSIS FORMAT:\n";
+                if ($cloudEnvironment) {
+                    $prompt .= "**IMPORTANT**: Even in cloud environment, provide COMPLETE TRANSPARENCY with full data structure analysis.\n";
+                }
                 $prompt .= "- **COMPLETE DATA STRUCTURE**: List ALL templates analyzed with their full section breakdown and question counts\n";
                 $prompt .= "- **TEMPLATE-BY-TEMPLATE BREAKDOWN**: Show each template's sections and their specific question coverage\n";
                 $prompt .= "- **LOCATION-BY-LOCATION ANALYSIS**: Show completion rates per location for each template/section\n";
@@ -1278,6 +1285,9 @@ class ReportController extends Controller
                 $prompt .= "- **QUESTION ANALYSIS**: Highlight specific questions with poor response rates or concerning answers\n";
                 $prompt .= "- **COMPLIANCE GAPS**: Identify specific areas needing attention with exact question numbers and section names\n";
                 $prompt .= "- **RECOMMENDATIONS**: Provide actionable steps for each identified issue with template/section references\n";
+                if ($cloudEnvironment) {
+                    $prompt .= "**CLOUD OPTIMIZATION NOTE**: While data is optimized for cloud processing, maintain complete transparency structure and provide comprehensive analysis of ALL available data.\n";
+                }
                 break;
                 
             case 'compliance_check':
