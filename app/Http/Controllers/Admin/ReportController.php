@@ -1066,12 +1066,12 @@ class ReportController extends Controller
         }
         
         if ($cloudEnvironment) {
-            // More aggressive tokens for cloud reports to ensure completion
+            // Increased tokens for cloud to allow comprehensive detailed reports
             return match($reportType) {
-                'executive_summary' => 800,      // Reduced from 1500
-                'compliance_check' => 1200,      // Reduced from 2200
-                'comparative_analysis' => 1500,  // Reduced from 2500
-                'detailed_analysis' => 2000,     // Reduced from 3200
+                'executive_summary' => 800,      // Keep executive summary short
+                'compliance_check' => 2000,      // Increased from 1200
+                'comparative_analysis' => 2500,  // Increased from 1500
+                'detailed_analysis' => 8000,     // MASSIVELY increased from 2000 to match local detail
                 default => 800
             };
         }
@@ -1099,7 +1099,15 @@ class ReportController extends Controller
         $prompt = "You are an expert healthcare auditor and data analyst. Analyze this audit data and provide intelligent insights with complete transparency, showing all data sources.\n\n";
         
         if ($cloudEnvironment && $reportType === 'detailed_analysis') {
-            $prompt .= "**CLOUD ENVIRONMENT - MAINTAIN FULL TRANSPARENCY**: Despite cloud optimization, you MUST provide the complete detailed analysis format with full data structure breakdown, template analysis, and comprehensive findings. Do not provide summary-style reports.\n\n";
+            $prompt .= "**CRITICAL INSTRUCTION FOR CLOUD ENVIRONMENT**: You MUST provide the IDENTICAL detailed analysis format as local environment:\n";
+            $prompt .= "- Complete '# COMPREHENSIVE HEALTHCARE AUDIT ANALYSIS REPORT' format\n";
+            $prompt .= "- Full '## 1. DATA TRANSPARENCY SECTION' with complete template breakdown table\n";
+            $prompt .= "- Comprehensive '## 2. DETAILED SECTION-BY-SECTION ANALYSIS' covering ALL sections\n"; 
+            $prompt .= "- Complete '## 3. TABLE DATA ANALYSIS' for all table data\n";
+            $prompt .= "- Full '## 4. CRITICAL COMPLIANCE GAPS' analysis\n";
+            $prompt .= "- Detailed '## 5. ACTIONABLE RECOMMENDATIONS' with timelines\n";
+            $prompt .= "- Complete '## 6. DATA SOURCES ANALYZED' transparency section\n";
+            $prompt .= "**DO NOT provide summary-style reports. Provide the FULL detailed transparency format.**\n\n";
         }
         
         // Basic audit context
@@ -1114,9 +1122,16 @@ class ReportController extends Controller
         if ($reportType === 'detailed_analysis') {
             $prompt .= "COMPLETE AUDIT DATA STRUCTURE FOR FULL ANALYSIS:\n";
             
-            // Cloud optimization: Allow more detail for comprehensive transparency
-            $maxQuestionsPerSection = $cloudEnvironment ? 20 : 50;  // Increased from 8 to 20 for more detail
-            $maxSectionsPerLocation = $cloudEnvironment ? 25 : 100; // Increased from 12 to 25 for more coverage
+            // Cloud optimization: For detailed analysis, provide FULL data like local environment
+            if ($reportType === 'detailed_analysis') {
+                // NO LIMITS for detailed analysis - full transparency required
+                $maxQuestionsPerSection = $cloudEnvironment ? 999 : 50;  // Unlimited for detailed reports
+                $maxSectionsPerLocation = $cloudEnvironment ? 999 : 100; // Unlimited for detailed reports
+            } else {
+                // Other report types can have reasonable limits
+                $maxQuestionsPerSection = $cloudEnvironment ? 40 : 50;
+                $maxSectionsPerLocation = $cloudEnvironment ? 50 : 100;
+            }
             
             foreach ($auditData['review_types_data'] as $reviewType) {
                 $prompt .= "═══════════════════════════════════════\n";
@@ -1180,10 +1195,12 @@ class ReportController extends Controller
                                     if (is_array($responseText)) {
                                         $responseText = implode(', ', $responseText);
                                     }
-                                    // Allow longer responses for cloud comprehensive reporting
-                                    if (is_string($responseText) && strlen($responseText) > ($cloudEnvironment ? 400 : 500)) {
-                                        $maxLength = $cloudEnvironment ? 400 : 500; // Increased from 150 to 400 for cloud
-                                        $responseText = substr($responseText, 0, $maxLength) . "... [TRUNCATED for " . ($cloudEnvironment ? "cloud efficiency" : "analysis efficiency") . "]";
+                                    // Allow full responses for detailed analysis, reasonable limits for others
+                                    $maxResponseLength = $cloudEnvironment ? 
+                                        ($reportType === 'detailed_analysis' ? 1000 : 400) : 500;
+                                    
+                                    if (is_string($responseText) && strlen($responseText) > $maxResponseLength) {
+                                        $responseText = substr($responseText, 0, $maxResponseLength) . "... [TRUNCATED for " . ($cloudEnvironment ? "cloud efficiency" : "analysis efficiency") . "]";
                                     }
                                     $prompt .= "ANSWER: {$responseText}\n";
                                 }
