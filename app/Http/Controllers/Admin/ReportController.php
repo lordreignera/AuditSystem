@@ -925,13 +925,14 @@ class ReportController extends Controller
             throw new \Exception('DeepSeek API key is not configured. Please add DEEPSEEK_API_KEY to your .env file.');
         }
 
-        // Force ultra-fast mode for cloud environments to ensure completion
+        // DO NOT force ultra-fast mode - let the careful configuration handle cloud optimization
         if ($cloudEnvironment) {
-            $options['ultra_fast_mode'] = true;
+            // Keep the cloud environment flag but respect the ultra_fast_mode setting from configuration
             $options['cloud_environment'] = true;
-            \Log::info('Forcing ultra-fast mode for cloud environment', [
+            \Log::info('Cloud environment detected - using configured optimization settings', [
                 'original_ultra_fast' => $options['ultra_fast_mode'] ?? 'not set',
-                'forced_ultra_fast' => true
+                'report_type' => $options['report_type'] ?? 'unknown',
+                'respecting_configuration' => true
             ]);
         }
 
@@ -1140,6 +1141,8 @@ class ReportController extends Controller
             $prompt .= "- Full '## 4. CRITICAL COMPLIANCE GAPS' analysis\n";
             $prompt .= "- Detailed '## 5. ACTIONABLE RECOMMENDATIONS' with timelines\n";
             $prompt .= "- Complete '## 6. DATA SOURCES ANALYZED' transparency section\n";
+            $prompt .= "**MANDATORY**: You MUST reference the actual location names, template names, section names, and question texts provided in the data. Do NOT generate generic healthcare findings.\n";
+            $prompt .= "**MANDATORY**: Start your response by listing the actual location names and template names from the data to prove you are analyzing the real audit data.\n";
             $prompt .= "**DO NOT provide summary-style reports. Provide the FULL detailed transparency format.**\n\n";
         }
         
@@ -1150,6 +1153,31 @@ class ReportController extends Controller
         $prompt .= "- Total Questions: {$auditData['total_questions']}\n";
         $prompt .= "- Total Responses: {$auditData['total_responses']}\n";
         $prompt .= "- Completion Rate: " . round(($auditData['total_responses'] / max($auditData['total_questions'], 1)) * 100, 1) . "%\n\n";
+        
+        // FORCE DATA VERIFICATION: List actual data to ensure AI acknowledges real audit data
+        if ($reportType === 'detailed_analysis') {
+            $prompt .= "**DATA VERIFICATION - ACKNOWLEDGE ACTUAL AUDIT DATA**:\n";
+            $prompt .= "Before providing your analysis, you MUST list these actual data elements from the audit:\n";
+            if (!empty($auditData['review_types_data'])) {
+                $firstReviewType = $auditData['review_types_data'][0];
+                $prompt .= "- Review Type: {$firstReviewType['review_type_name']}\n";
+                if (!empty($firstReviewType['locations'])) {
+                    $firstLocation = $firstReviewType['locations'][0];
+                    $prompt .= "- Location Name: {$firstLocation['location_name']}\n";
+                    if (!empty($firstLocation['sections_data'])) {
+                        $firstSection = $firstLocation['sections_data'][0];
+                        $prompt .= "- First Template: {$firstSection['template_name']}\n";
+                        $prompt .= "- First Section: {$firstSection['section_name']}\n";
+                        if (!empty($firstSection['questions_data'])) {
+                            $firstQuestion = $firstSection['questions_data'][0];
+                            $prompt .= "- First Question: {$firstQuestion['question_text']}\n";
+                            $prompt .= "- First Response: " . ($firstQuestion['response'] ?? '[NO RESPONSE]') . "\n";
+                        }
+                    }
+                }
+            }
+            $prompt .= "**You MUST reference these exact names and data in your analysis. This is real audit data, not generic healthcare scenarios.**\n\n";
+        }
         
         // For detailed analysis, include COMPLETE data structure with cloud optimization
         if ($reportType === 'detailed_analysis') {
